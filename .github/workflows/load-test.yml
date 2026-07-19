@@ -6,4 +6,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: grafana/setup-k6-action@v1
-      - run: k6 run -e BASE_URL=https://quiz-server-ma5v.onrender.com load-test.js
+      - run: k6 run -e BASE_URL=https://quiz-server-ma5v.onrender.com .github/load-test.js
