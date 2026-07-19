@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const questionSchema = new mongoose.Schema({
+  game: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true, index: true },
   text: { type: String, required: true },        // טקסט השאלה - מוצג רק במסך המנהל
   options: { type: [String], required: true },    // רשימת האפשרויות (2-9 אפשרויות)
   correctIndex: { type: Number, required: true }, // אינדקס 0-based של התשובה הנכונה

@@ -1,5 +1,7 @@
 /**
  * ניהול מצב המשחק החי בזיכרון (לא ב-Mongo, כי זה מצב ריצה זמני).
+ * תמיד רק משחק אחד פעיל בפועל - activeGame הוא מטמון קליל של המשחק הפעיל,
+ * כדי לא לפגוע ב-DB בכל פינג בודד שמגיע מימות (שיכולים להיות רבים מאוד).
  *
  * pendingResponses: מיפוי callId -> אובייקט response של Express שממתין.
  * כשמשתמש מתקשר ואין שאלה פתוחה, אנחנו לא עונים לו מיד -
@@ -13,6 +15,7 @@ const state = {
   openedAt: null,          // Date.now() של רגע פתיחת השאלה
   autoAdvance: false,      // האם המשחק רץ ברצף אוטומטי כרגע
   playersAtOpen: 0,        // כמות שחקנים מחוברים ברגע פתיחת השאלה - לחישוב אחוז "לא ענה" בתוצאות
+  activeGame: null,        // { _id, name, slug } של המשחק הפעיל, או null אם אין משחק פעיל כלל
 };
 
 const pendingResponses = new Map();
@@ -20,14 +23,8 @@ const pendingResponses = new Map();
 function holdResponse(callId, phone, res, onClientHangup) {
   pendingResponses.set(callId, { res, phone });
 
-  // ===== גילוי ניתוק אמיתי בזמן המתנה =====
-  // כשהשיחה מוחזקת (hold) וה-caller מנתק, ימות לרוב לא שולחת בקשת HTTP
-  // נפרדת עם hangup=yes (כי מבחינתה היא עדיין "ממתינה לנו" על הבקשה שהוחזקה).
-  // מה שכן קורה בוודאות: חיבור ה-TCP הגולמי נסגר. מאזינים לזה ישירות
-  // כדי לתפוס גם את המקרה הזה, ולא רק hangup=yes מפורש.
   const cleanup = () => {
     const current = pendingResponses.get(callId);
-    // בודקים שזו עדיין אותה בקשה שהוחזקה (לא בקשה חדשה שכבר החליפה אותה)
     if (current && current.res === res) {
       pendingResponses.delete(callId);
       if (onClientHangup) onClientHangup(callId);
@@ -50,17 +47,22 @@ function resolveAll(textBody) {
   }
 }
 
-/**
- * שם המשתנה שנשלח לימות בפקודת ה-read עבור שאלה נתונה.
- *
- * חשוב: השם חייב להיות שונה מ-שאלה לשאלה (לא קבוע כמו "answer" כמו שהיה).
- * הסיבה: כשמשתמשים באותו שם משתנה פעמיים באותה שיחה, קיים סיכוי גבוה
- * שימות "זוכרת" את הערך שנאסף בפעם הקודמת ומחזירה אותו מיידית בלי
- * לחכות בכלל ללחיצה חדשה - זה בדיוק מה שגרם לתופעה של "רק השאלה
- * הראשונה נקלטת" (לשאלות הבאות היה חוזר בטעות הניקוד/הבחירה הישנים).
- */
 function answerFieldName(question) {
   return `ans_${question._id}`;
 }
 
-module.exports = { state, pendingResponses, holdResponse, resolveResponse, resolveAll, answerFieldName };
+// נקרא בעליית שרת ובכל החלפת משחק פעיל - תמיד מאפס את מצב המשחק החי
+// כדי שלא "יידלף" מצב (שאלה פתוחה, ניקוד רגעי) מהמשחק הקודם למשחק החדש.
+function setActiveGame(game) {
+  state.activeGame = game ? { _id: game._id, name: game.name, slug: game.slug } : null;
+  state.status = 'idle';
+  state.currentQuestion = null;
+  state.openedAt = null;
+  state.autoAdvance = false;
+  state.playersAtOpen = 0;
+}
+
+module.exports = {
+  state, pendingResponses, holdResponse, resolveResponse, resolveAll,
+  answerFieldName, setActiveGame
+};

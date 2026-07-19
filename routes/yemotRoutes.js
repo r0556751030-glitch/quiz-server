@@ -19,9 +19,9 @@ async function markDisconnected(io, callId) {
   io.emit('playerDisconnected', { callId });
 }
 
-// שולף את השם/כינוי המשויך למספר טלפון, אם קיים (לתצוגה במסך במקום מספר גולמי)
-async function getContactName(phone) {
-  const contact = await Contact.findOne({ phone });
+// שולף את השם/כינוי המשויך למספר טלפון בתוך המשחק הנתון, אם קיים
+async function getContactName(gameId, phone) {
+  const contact = await Contact.findOne({ game: gameId, phone });
   return contact ? contact.name : null;
 }
 
@@ -40,33 +40,38 @@ router.post('/api', async (req, res) => {
       return res.type('text/plain').send('');
     }
 
+    // ===== אין משחק פעיל כרגע - אי אפשר לשבץ את השיחה לשום מקום =====
+    if (!state.activeGame) {
+      return res.type('text/plain').send('id_list_message=t-אין משחק פעיל כרגע, אנא נסו שוב מאוחר יותר');
+    }
+    const gameId = state.activeGame._id;
+
     // ===== מציאה/יצירה של השחקן (לפי callId הייחודי לשיחה) =====
     let player = await Player.findOne({ callId });
     if (!player) {
-      player = await Player.create({ phone, callId });
-      const name = await getContactName(phone);
+      player = await Player.create({ game: gameId, phone, callId });
+      const name = await getContactName(gameId, phone);
       io.emit('playerConnected', { callId, phone, playerId: player._id, score: player.score, name });
     } else if (!player.active) {
-      // שיחה חוזרת עם אותו callId שסומנה כמנותקת (למשל ע"י הבאג הישן) - מחזירים אותה לפעילה
+      // שיחה חוזרת עם אותו callId שסומנה כמנותקת - מחזירים אותה לפעילה
       player.active = true;
       await player.save();
     }
 
     // ===== אם זו תשובה לשאלה פתוחה =====
-    // בודקים ספציפית את שם השדה הייחודי של השאלה הפתוחה כרגע (ולא שדה קבוע בשם "answer"),
-    // כדי לא לקבל בטעות ערך "זכור" משאלה קודמת.
     let justAnswered = false;
     if (state.status === 'open' && state.currentQuestion) {
       const fieldName = answerFieldName(state.currentQuestion);
       const answer = req.body[fieldName];
 
       if (answer !== undefined) {
-        justAnswered = true; // ברגע שענה על השאלה הנוכחית, לא נשלח לו אותה שוב - נעביר אותו להמתנה
+        justAnswered = true;
         const isCorrect = answer === String(state.currentQuestion.correctIndex + 1);
         const responseTimeMs = Date.now() - state.openedAt;
 
         try {
           await Answer.create({
+            game: gameId,
             player: player._id,
             question: state.currentQuestion._id,
             choice: answer,
@@ -77,7 +82,7 @@ router.post('/api', async (req, res) => {
             player.score += 10;
             await player.save();
           }
-          const name = await getContactName(phone);
+          const name = await getContactName(gameId, phone);
           io.emit('playerAnswered', {
             callId, phone, playerId: player._id,
             questionId: state.currentQuestion._id, choice: answer, isCorrect,
@@ -90,15 +95,12 @@ router.post('/api', async (req, res) => {
     }
 
     // ===== החלטה מה להשיב כרגע =====
-    // רק אם השאלה פתוחה, וזו לא תגובת-תשובה שהרגע טיפלנו בה (אחרת נשלח לו את אותה שאלה שוב בטעות)
     if (state.status === 'open' && state.currentQuestion && !justAnswered) {
       const elapsedSec = (Date.now() - state.openedAt) / 1000;
       const remaining = state.currentQuestion.answerWindowSeconds - elapsedSec;
       return res.type('text/plain').send(buildReadCommand(state.currentQuestion, remaining));
     }
 
-    // אין שאלה פתוחה כרגע, או שהשחקן כבר ענה על הנוכחית - משאירים את השיחה פתוחה וממתינים לשאלה הבאה.
-    // מעבירים callback שיסמן את השחקן כמנותק אם החיבור נסגר בזמן שהוא מוחזק כאן (ראו gameState.js).
     holdResponse(callId, phone, res, (disconnectedCallId) => markDisconnected(io, disconnectedCallId));
   } catch (err) {
     console.error('שגיאה בטיפול בבקשת ימות:', err);

@@ -1,20 +1,101 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const { state, resolveAll, answerFieldName } = require('../game/gameState');
+const Game = require('../models/Game');
+const { state, resolveAll, answerFieldName, setActiveGame } = require('../game/gameState');
+const { requireAuth, requireSuper, resolveGameId } = require('../middleware/auth');
 
 let closeTimer = null;   // סוגר את השאלה הנוכחית בתום הזמן
 let advanceTimer = null; // מרווח נשימה קצר לפני מעבר אוטומטי לשאלה הבאה
 
-// פותח שאלה בפועל - פונקציה משותפת שמשמשת גם פתיחה ידנית וגם רצף אוטומטי
+function slugify(text) {
+  return (text || '').trim().toLowerCase()
+    .replace(/[^\u0590-\u05FFa-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || `game-${Date.now()}`;
+}
+
+// כל בקשה ל-/admin/* (מלבד login/logout/me שנמצאים ב-authRoutes) דורשת התחברות תקפה
+router.use(requireAuth);
+
+// ===================================================================
+// ניהול משחקים - מוגבל לסיסמת-על בלבד
+// ===================================================================
+
+router.get('/games', requireSuper, async (req, res) => {
+  const games = await Game.find().sort({ createdAt: -1 });
+  res.json(games.map((g) => ({ _id: g._id, name: g.name, slug: g.slug, isActive: g.isActive, createdAt: g.createdAt })));
+});
+
+router.post('/games', requireSuper, async (req, res) => {
+  try {
+    const { name, password } = req.body;
+    if (!name || !password) return res.status(400).json({ error: 'יש למלא שם וסיסמה' });
+
+    let slug = slugify(name);
+    let suffix = 1;
+    while (await Game.findOne({ slug })) slug = `${slugify(name)}-${suffix++}`;
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const hasActive = !!(await Game.findOne({ isActive: true }));
+    const game = await Game.create({ name, slug, passwordHash, isActive: !hasActive });
+
+    // אם זה המשחק הראשון שנוצר אי פעם - הוא הופך פעיל אוטומטית
+    if (!hasActive) setActiveGame(game);
+
+    res.json({ success: true, game: { _id: game._id, name: game.name, slug: game.slug, isActive: game.isActive } });
+  } catch (err) {
+    console.error('שגיאה ביצירת משחק:', err);
+    res.status(500).json({ error: 'שגיאה ביצירת המשחק' });
+  }
+});
+
+router.post('/games/:id/activate', requireSuper, async (req, res) => {
+  const game = await Game.findById(req.params.id);
+  if (!game) return res.status(404).json({ error: 'משחק לא נמצא' });
+
+  // מפסיקים כל טיימר פעיל של המשחק הקודם לפני המעבר
+  if (closeTimer) clearTimeout(closeTimer);
+  if (advanceTimer) clearTimeout(advanceTimer);
+
+  await Game.updateMany({ _id: { $ne: game._id } }, { isActive: false });
+  game.isActive = true;
+  await game.save();
+  setActiveGame(game); // מאפס את מצב המשחק החי (שאלה פתוחה וכו')
+
+  req.app.get('io').emit('gameSwitched', { gameId: game._id, gameName: game.name });
+  res.json({ success: true });
+});
+
+router.delete('/games/:id', requireSuper, async (req, res) => {
+  const game = await Game.findById(req.params.id);
+  if (!game) return res.status(404).json({ error: 'משחק לא נמצא' });
+  if (game.isActive) return res.status(400).json({ error: 'אי אפשר למחוק משחק פעיל - יש להפעיל משחק אחר קודם' });
+
+  await Promise.all([
+    Question.deleteMany({ game: game._id }),
+    Player.deleteMany({ game: game._id }),
+    Answer.deleteMany({ game: game._id }),
+    Contact.deleteMany({ game: game._id }),
+    Game.findByIdAndDelete(game._id)
+  ]);
+  res.json({ success: true });
+});
+
+// ===================================================================
+// מכאן והלאה - כל פעולה מוגבלת למשחק הפעיל הנוכחי (super רואה את הפעיל,
+// game מוגבל לזה שהתחבר אליו)
+// ===================================================================
+router.use(resolveGameId);
+
 async function openQuestion(app, question) {
   state.status = 'open';
   state.currentQuestion = question;
   state.openedAt = Date.now();
-  state.playersAtOpen = await Player.countDocuments({ active: true });
+  state.playersAtOpen = await Player.countDocuments({ active: true, game: question.game });
 
   const allowedKeys = question.options.map((_, i) => i + 1).join('');
   const command = `read=f-001=${answerFieldName(question)},,1,1,${question.answerWindowSeconds},NO,yes,,,${allowedKeys},3,Ok,NOANSWER,,no`;
@@ -29,7 +110,6 @@ async function openQuestion(app, question) {
   });
 }
 
-// מחשב אחוזי תשובות לכל אפשרות ושולח לתצוגה - נקרא בכל סגירת שאלה (ידנית או אוטומטית)
 async function computeAndEmitResults(app, question) {
   const answers = await Answer.find({ question: question._id });
   const counts = question.options.map(() => 0);
@@ -44,18 +124,13 @@ async function computeAndEmitResults(app, question) {
   const percentages = counts.map((c) => (totalAnswered ? Math.round((c / totalAnswered) * 100) : 0));
 
   app.get('io').emit('questionResults', {
-    questionId: question._id,
-    counts,
-    percentages,
-    totalAnswered,
-    noAnswerCount,
-    correctIndex: question.correctIndex
+    questionId: question._id, counts, percentages, totalAnswered, noAnswerCount, correctIndex: question.correctIndex
   });
 }
 
 function scheduleAutoClose(app, question) {
   if (closeTimer) clearTimeout(closeTimer);
-  const ms = (question.answerWindowSeconds + 3) * 1000; // 3 שניות מרווח ביטחון לאיחור רשת
+  const ms = (question.answerWindowSeconds + 3) * 1000;
 
   closeTimer = setTimeout(async () => {
     if (state.currentQuestion && String(state.currentQuestion._id) === String(question._id) && state.status === 'open') {
@@ -64,15 +139,15 @@ function scheduleAutoClose(app, question) {
       await computeAndEmitResults(app, question);
 
       if (state.autoAdvance) {
-        advanceTimer = setTimeout(() => advanceToNext(app, question), 6000); // זמן לצפייה בתוצאות לפני המעבר
+        advanceTimer = setTimeout(() => advanceToNext(app, question), 6000);
       }
     }
   }, ms);
 }
 
 async function advanceToNext(app, prevQuestion) {
-  if (!state.autoAdvance) return; // ייתכן שהמנהל השהה בינתיים
-  const next = await Question.findOne({ order: { $gt: prevQuestion.order } }).sort({ order: 1 });
+  if (!state.autoAdvance) return;
+  const next = await Question.findOne({ game: prevQuestion.game, order: { $gt: prevQuestion.order } }).sort({ order: 1 });
   if (next) {
     await openQuestion(app, next);
   } else {
@@ -81,9 +156,8 @@ async function advanceToNext(app, prevQuestion) {
   }
 }
 
-// ===== פתיחה ידנית של שאלה ספציפית (תמיד עובד, גם באמצע רצף אוטומטי) =====
 router.post('/open-question/:id', async (req, res) => {
-  const question = await Question.findById(req.params.id);
+  const question = await Question.findOne({ _id: req.params.id, game: req.gameId });
   if (!question) return res.status(404).json({ error: 'שאלה לא נמצאה' });
 
   if (advanceTimer) clearTimeout(advanceTimer);
@@ -91,9 +165,8 @@ router.post('/open-question/:id', async (req, res) => {
   res.json({ success: true, question });
 });
 
-// ===== התחלת משחק ברצף אוטומטי (מהשאלה הראשונה) =====
 router.post('/start-game', async (req, res) => {
-  const first = await Question.findOne().sort({ order: 1 });
+  const first = await Question.findOne({ game: req.gameId }).sort({ order: 1 });
   if (!first) return res.status(400).json({ error: 'אין שאלות במאגר' });
 
   state.autoAdvance = true;
@@ -102,7 +175,6 @@ router.post('/start-game', async (req, res) => {
   res.json({ success: true });
 });
 
-// ===== השהיית הרצף האוטומטי (השאלה הנוכחית ממשיכה לרוץ, רק לא עוברים אוטומטית להבאה) =====
 router.post('/pause', (req, res) => {
   state.autoAdvance = false;
   if (advanceTimer) clearTimeout(advanceTimer);
@@ -110,13 +182,12 @@ router.post('/pause', (req, res) => {
   res.json({ success: true });
 });
 
-// ===== המשך הרצף האוטומטי =====
 router.post('/resume', async (req, res) => {
   state.autoAdvance = true;
   if (state.status !== 'open') {
     const next = state.currentQuestion
-      ? await Question.findOne({ order: { $gt: state.currentQuestion.order } }).sort({ order: 1 })
-      : await Question.findOne().sort({ order: 1 });
+      ? await Question.findOne({ game: req.gameId, order: { $gt: state.currentQuestion.order } }).sort({ order: 1 })
+      : await Question.findOne({ game: req.gameId }).sort({ order: 1 });
     if (next) await openQuestion(req.app, next);
   }
   req.app.get('io').emit('gameResumed', {});
@@ -135,45 +206,35 @@ router.post('/close-question', async (req, res) => {
 
 // ===== לוח מובילים לפי ניקוד =====
 router.get('/leaderboard', async (req, res) => {
-  // ממזגים לפי מספר טלפון - שורה אחת לכל מספר, סכום ניקוד מכל השיחות, סטטוס לפי חיבור נוכחי
   const players = await Player.aggregate([
-    { $group: {
-        _id: '$phone',
-        score: { $sum: '$score' },
-        active: { $max: { $cond: ['$active', 1, 0] } }
+    { $match: { game: req.gameId } },
+    { $group: { _id: '$phone', score: { $sum: '$score' }, active: { $max: { $cond: ['$active', 1, 0] } } } },
+    { $lookup: {
+        from: 'contacts',
+        let: { phone: '$_id' },
+        pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$phone', '$$phone'] }, { $eq: ['$game', req.gameId] }] } } }],
+        as: 'contact'
     }},
-    { $lookup: { from: 'contacts', localField: '_id', foreignField: 'phone', as: 'contact' } },
-    { $project: {
-        phone: '$_id',
-        score: 1,
-        active: { $eq: ['$active', 1] },
-        name: { $arrayElemAt: ['$contact.name', 0] },
-        _id: 0
-    }},
+    { $project: { phone: '$_id', score: 1, active: { $eq: ['$active', 1] }, name: { $arrayElemAt: ['$contact.name', 0] }, _id: 0 } },
     { $sort: { score: -1 } }
   ]);
   res.json(players);
 });
 
-// ===== לוח מובילים לפי מהירות (זמן ממוצע לתשובה נכונה, מהיר יותר = גבוה יותר) =====
+// ===== לוח מובילים לפי מהירות =====
 router.get('/leaderboard-speed', async (req, res) => {
   const speed = await Answer.aggregate([
-    { $match: { isCorrect: true, responseTimeMs: { $ne: null } } },
+    { $match: { game: req.gameId, isCorrect: true, responseTimeMs: { $ne: null } } },
     { $lookup: { from: 'players', localField: 'player', foreignField: '_id', as: 'p' } },
     { $unwind: '$p' },
-    { $group: {
-        _id: '$p.phone',
-        totalTimeMs: { $sum: '$responseTimeMs' },
-        correctCount: { $sum: 1 }
+    { $group: { _id: '$p.phone', totalTimeMs: { $sum: '$responseTimeMs' }, correctCount: { $sum: 1 } } },
+    { $lookup: {
+        from: 'contacts',
+        let: { phone: '$_id' },
+        pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$phone', '$$phone'] }, { $eq: ['$game', req.gameId] }] } } }],
+        as: 'contact'
     }},
-    { $lookup: { from: 'contacts', localField: '_id', foreignField: 'phone', as: 'contact' } },
-    { $project: {
-        phone: '$_id',
-        correctCount: 1,
-        avgTimeMs: { $divide: ['$totalTimeMs', '$correctCount'] },
-        name: { $arrayElemAt: ['$contact.name', 0] },
-        _id: 0
-    }},
+    { $project: { phone: '$_id', correctCount: 1, avgTimeMs: { $divide: ['$totalTimeMs', '$correctCount'] }, name: { $arrayElemAt: ['$contact.name', 0] }, _id: 0 } },
     { $sort: { avgTimeMs: 1 } }
   ]);
   res.json(speed);
@@ -181,46 +242,54 @@ router.get('/leaderboard-speed', async (req, res) => {
 
 // ===== רשימת שחקנים מחוברים כרגע =====
 router.get('/connected', async (req, res) => {
-  const active = await Player.find({ active: true }).sort({ connectedAt: -1 });
+  const active = await Player.find({ active: true, game: req.gameId }).sort({ connectedAt: -1 });
   const phones = active.map((p) => p.phone);
-  const contacts = await Contact.find({ phone: { $in: phones } });
+  const contacts = await Contact.find({ game: req.gameId, phone: { $in: phones } });
   const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
 
-  const result = active.map((p) => ({
-    phone: p.phone,
-    name: nameMap.get(p.phone) || null,
-    connectedAt: p.connectedAt,
-    callId: p.callId
-  }));
-  res.json(result);
+  res.json(active.map((p) => ({ phone: p.phone, name: nameMap.get(p.phone) || null, connectedAt: p.connectedAt, callId: p.callId })));
 });
 
-// ===== ניהול כינויים/שמות לשחקנים =====
+// ===== ניהול כינויים =====
 
-// כל המספרים שאי פעם התקשרו, עם השם המשויך אם קיים - למסך "ניהול שחקנים"
 router.get('/contacts', async (req, res) => {
-  const phones = await Player.distinct('phone');
-  const contacts = await Contact.find({ phone: { $in: phones } });
+  const phones = await Player.distinct('phone', { game: req.gameId });
+  const contacts = await Contact.find({ game: req.gameId, phone: { $in: phones } });
   const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
-
-  const result = phones.map((phone) => ({ phone, name: nameMap.get(phone) || null }));
-  res.json(result);
+  res.json(phones.map((phone) => ({ phone, name: nameMap.get(phone) || null })));
 });
 
-// קביעה/עדכון של שם עבור מספר טלפון
 router.post('/contacts', async (req, res) => {
   const { phone, name } = req.body;
   if (!phone) return res.status(400).json({ error: 'חסר מספר טלפון' });
 
-  await Contact.findOneAndUpdate({ phone }, { name: name || null }, { upsert: true });
+  await Contact.findOneAndUpdate({ game: req.gameId, phone }, { name: name || null }, { upsert: true });
   req.app.get('io').emit('contactUpdated', { phone, name: name || null });
+  res.json({ success: true });
+});
+
+// ===== מחיקת שחקן (חדש) =====
+// מוחק לגמרי שחקן מהמשחק הנוכחי: כל מסמכי ה-Player שלו (כל השיחות שביצע),
+// כל התשובות שלו, והכינוי שלו - לא ניתן לשחזור.
+router.delete('/players/:phone', async (req, res) => {
+  const { phone } = req.params;
+  const players = await Player.find({ game: req.gameId, phone });
+  const playerIds = players.map((p) => p._id);
+
+  await Promise.all([
+    Answer.deleteMany({ game: req.gameId, player: { $in: playerIds } }),
+    Player.deleteMany({ game: req.gameId, phone }),
+    Contact.deleteOne({ game: req.gameId, phone })
+  ]);
+
+  req.app.get('io').emit('playerDeleted', { phone });
   res.json({ success: true });
 });
 
 // ===== ניהול שאלות =====
 
 router.get('/questions', async (req, res) => {
-  const questions = await Question.find().sort({ order: 1 });
+  const questions = await Question.find({ game: req.gameId }).sort({ order: 1 });
   res.json(questions);
 });
 
@@ -235,8 +304,9 @@ router.post('/questions', async (req, res) => {
       return res.status(400).json({ error: 'יש לבחור תשובה נכונה תקינה' });
     }
 
-    const count = await Question.countDocuments();
+    const count = await Question.countDocuments({ game: req.gameId });
     const question = await Question.create({
+      game: req.gameId,
       text,
       options,
       correctIndex: Number(correctIndex),
@@ -252,16 +322,15 @@ router.post('/questions', async (req, res) => {
 });
 
 router.delete('/questions/:id', async (req, res) => {
-  await Question.findByIdAndDelete(req.params.id);
+  await Question.findOneAndDelete({ _id: req.params.id, game: req.gameId });
   res.json({ success: true });
 });
 
-// משנה את סדר השאלות - מקבל מערך מזהים בסדר הרצוי, וממספר מחדש 1,2,3...
 router.post('/questions/reorder', async (req, res) => {
   const { orderedIds } = req.body;
   if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'נתונים לא תקינים' });
 
-  await Promise.all(orderedIds.map((id, idx) => Question.findByIdAndUpdate(id, { order: idx + 1 })));
+  await Promise.all(orderedIds.map((id, idx) => Question.findOneAndUpdate({ _id: id, game: req.gameId }, { order: idx + 1 })));
   res.json({ success: true });
 });
 
@@ -272,7 +341,8 @@ router.get('/status', (req, res) => {
     currentQuestion: state.currentQuestion,
     autoAdvance: state.autoAdvance,
     openedAt: state.openedAt,
-    playersAtOpen: state.playersAtOpen
+    playersAtOpen: state.playersAtOpen,
+    activeGame: state.activeGame
   });
 });
 

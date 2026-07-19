@@ -2,27 +2,99 @@ const socket = io();
 const activeCallIds = new Set();
 let questionsCache = [];
 let countdownInterval = null;
+let currentRole = null; // 'super' | 'game'
+let appInitialized = false;
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
-// ===== חיבור לשרת =====
-socket.on('connect', () => setConn(true));
-socket.on('disconnect', () => setConn(false));
-function setConn(on) {
-  document.getElementById('connDot').className = 'conn-dot ' + (on ? 'on' : 'off');
+// ===================================================================
+// התחברות
+// ===================================================================
+
+async function checkAuth() {
+  const res = await fetch('/admin/me');
+  const data = await res.json();
+  if (data.authenticated) onAuthenticated(data.role, data.gameName);
+  else showLogin();
 }
 
-// ===== מונה מחוברים =====
+function showLogin(errorMsg) {
+  document.getElementById('loginOverlay').hidden = false;
+  document.getElementById('loginError').textContent = errorMsg || '';
+}
+
+function onAuthenticated(role, gameName) {
+  currentRole = role;
+  document.getElementById('loginOverlay').hidden = true;
+  document.getElementById('gamesNavBtn').hidden = role !== 'super';
+  document.getElementById('activeGameName').textContent = gameName ? '· ' + gameName : '';
+  initApp();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const password = document.getElementById('loginPassword').value;
+  const res = await fetch('/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById('loginPassword').value = '';
+    onAuthenticated(data.role, data.gameName);
+  } else {
+    showLogin(data.error || 'שגיאה בהתחברות');
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/admin/logout', { method: 'POST' });
+  location.reload();
+});
+
+// עוטף fetch לפעולות ניהול - אם השרת מחזיר 401 (session פג/לא קיים), חוזרים למסך login
+async function authFetch(url, options) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    showLogin('פג תוקף ההתחברות - יש להתחבר מחדש');
+  }
+  return res;
+}
+
+function initApp() {
+  if (appInitialized) return;
+  appInitialized = true;
+  loadQuestions();
+  loadStatus();
+}
+
+checkAuth();
+
+// ===================================================================
+// מונה מחוברים
+// ===================================================================
 socket.on('playerConnected', (p) => { activeCallIds.add(p.callId); updateConnectedCount(); });
 socket.on('playerDisconnected', (p) => { activeCallIds.delete(p.callId); updateConnectedCount(); });
 function updateConnectedCount() {
   document.getElementById('connectedCount').textContent = activeCallIds.size;
 }
 
-// ===== Fair Play: הבזק שם בלבד כשמישהו עונה, בלי לחשוף מה נבחר או אם נכון =====
-socket.on('playerAnswered', (a) => {
-  showAnswerToast(a.name || a.phone || 'שחקן');
+socket.on('connect', () => document.getElementById('connDot').className = 'conn-dot on');
+socket.on('disconnect', () => document.getElementById('connDot').className = 'conn-dot off');
+
+// ===================================================================
+// החלפת משחק פעיל (ע"י סיסמת-על) - כל דשבורד פתוח מתעדכן
+// ===================================================================
+socket.on('gameSwitched', (data) => {
+  alert('המשחק הפעיל הוחלף ל: ' + data.gameName + '\nהעמוד ייטען מחדש.');
+  location.reload();
 });
+
+// ===================================================================
+// Fair Play: הבזק שם בלבד כשמישהו עונה, בלי לחשוף מה נבחר או אם נכון
+// ===================================================================
+socket.on('playerAnswered', (a) => showAnswerToast(a.name || a.phone || 'שחקן'));
 function showAnswerToast(label) {
   const stack = document.getElementById('toastStack');
   const el = document.createElement('div');
@@ -36,7 +108,9 @@ function showAnswerToast(label) {
   }, 1300);
 }
 
-// ===== פתיחת שאלה =====
+// ===================================================================
+// שאלה חיה
+// ===================================================================
 socket.on('questionOpened', (data) => {
   document.getElementById('idleState').hidden = true;
   document.getElementById('questionResults').hidden = true;
@@ -77,14 +151,12 @@ function startTimer(seconds, openedAt) {
   countdownInterval = setInterval(tick, 200);
 }
 
-// ===== סגירת שאלה =====
 socket.on('questionClosed', () => {
   if (countdownInterval) clearInterval(countdownInterval);
   document.getElementById('questionLive').hidden = true;
   setControlState('closed');
 });
 
-// ===== תוצאות (אחוזים + הדגשת תשובה נכונה) =====
 socket.on('questionResults', (r) => {
   const panel = document.getElementById('questionResults');
   panel.hidden = false;
@@ -121,7 +193,9 @@ socket.on('gameFinished', () => {
   idle.textContent = '🏁 המשחק הסתיים!';
 });
 
-// ===== כפתורי שליטה (גלויים, קטנים) =====
+// ===================================================================
+// כפתורי שליטה (גלויים, קטנים)
+// ===================================================================
 function setControlState(kind) {
   const startBtn = document.getElementById('startBtn');
   const pauseBtn = document.getElementById('pauseBtn');
@@ -139,24 +213,26 @@ function setControlState(kind) {
 }
 
 document.getElementById('startBtn').addEventListener('click', async () => {
-  const res = await fetch('/admin/start-game', { method: 'POST' });
+  const res = await authFetch('/admin/start-game', { method: 'POST' });
   if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
 });
 document.getElementById('pauseBtn').addEventListener('click', async () => {
   const btn = document.getElementById('pauseBtn');
-  if (btn.textContent.includes('השהה')) await fetch('/admin/pause', { method: 'POST' });
-  else await fetch('/admin/resume', { method: 'POST' });
+  if (btn.textContent.includes('השהה')) await authFetch('/admin/pause', { method: 'POST' });
+  else await authFetch('/admin/resume', { method: 'POST' });
 });
 document.getElementById('closeBtn').addEventListener('click', async () => {
-  await fetch('/admin/close-question', { method: 'POST' });
+  await authFetch('/admin/close-question', { method: 'POST' });
 });
 
-// ===== הצגת 3 מובילים =====
+// ===================================================================
+// הצגת 3 מובילים
+// ===================================================================
 document.getElementById('top3Btn').addEventListener('click', async () => {
   const overlay = document.getElementById('top3Overlay');
   if (!overlay.hidden) { overlay.hidden = true; return; }
 
-  const res = await fetch('/admin/leaderboard');
+  const res = await authFetch('/admin/leaderboard');
   const players = await res.json();
   const top3 = players.slice(0, 3);
   const medals = ['🥇', '🥈', '🥉'];
@@ -178,7 +254,9 @@ document.getElementById('top3Overlay').addEventListener('click', (e) => {
   if (e.target.id === 'top3Overlay') e.target.hidden = true;
 });
 
-// ===== סרגל ניהול נשלף =====
+// ===================================================================
+// סרגל ניהול נשלף
+// ===================================================================
 const drawer = document.getElementById('drawer');
 const drawerOverlay = document.getElementById('drawerOverlay');
 
@@ -199,12 +277,16 @@ document.querySelectorAll('.nav-btn').forEach((btn) => {
     if (btn.dataset.panel === 'users') loadUsers();
     if (btn.dataset.panel === 'scores') loadScores();
     if (btn.dataset.panel === 'connections') loadConnections();
+    if (btn.dataset.panel === 'games') loadGames();
   });
 });
 
-// ===== ניהול שאלות =====
+// ===================================================================
+// ניהול שאלות
+// ===================================================================
 async function loadQuestions() {
-  const res = await fetch('/admin/questions');
+  const res = await authFetch('/admin/questions');
+  if (!res.ok) return;
   questionsCache = await res.json();
   const wrap = document.getElementById('qlist');
   wrap.innerHTML = '';
@@ -233,11 +315,12 @@ async function loadQuestions() {
   wrap.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => moveQuestion(b.dataset.up, -1)));
   wrap.querySelectorAll('[data-down]').forEach((b) => b.addEventListener('click', () => moveQuestion(b.dataset.down, 1)));
   wrap.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', async () => {
-    await fetch('/admin/open-question/' + b.dataset.open, { method: 'POST' });
+    await authFetch('/admin/open-question/' + b.dataset.open, { method: 'POST' });
     closeDrawer();
   }));
   wrap.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
-    await fetch('/admin/questions/' + b.dataset.del, { method: 'DELETE' });
+    if (!confirm('למחוק את השאלה הזו לצמיתות?')) return;
+    await authFetch('/admin/questions/' + b.dataset.del, { method: 'DELETE' });
     loadQuestions();
   }));
 }
@@ -251,7 +334,7 @@ async function moveQuestion(id, direction) {
   [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
   const orderedIds = reordered.map((q) => q._id);
 
-  await fetch('/admin/questions/reorder', {
+  await authFetch('/admin/questions/reorder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ orderedIds })
@@ -283,7 +366,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   const text = document.getElementById('qText').value.trim();
   const answerWindowSeconds = Number(document.getElementById('qSeconds').value);
 
-  const res = await fetch('/admin/questions', {
+  const res = await authFetch('/admin/questions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, options, correctIndex, answerWindowSeconds })
@@ -298,9 +381,12 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
   }
 });
 
-// ===== ניהול משתמשים - כינויים =====
+// ===================================================================
+// ניהול משתמשים - כינויים + מחיקת שחקן
+// ===================================================================
 async function loadUsers() {
-  const res = await fetch('/admin/contacts');
+  const res = await authFetch('/admin/contacts');
+  if (!res.ok) return;
   const contacts = await res.json();
   const tbody = document.querySelector('#usersTable tbody');
   tbody.innerHTML = '';
@@ -311,6 +397,7 @@ async function loadUsers() {
       <td>${c.phone}</td>
       <td><input type="text" class="nick-input" value="${c.name || ''}" placeholder="כינוי..." data-phone="${c.phone}"></td>
       <td><button class="btn-mini" data-save="${c.phone}">שמור</button></td>
+      <td><button class="btn-mini" data-delplayer="${c.phone}">מחק שחקן</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -319,7 +406,7 @@ async function loadUsers() {
     btn.addEventListener('click', async () => {
       const phone = btn.dataset.save;
       const input = tbody.querySelector(`.nick-input[data-phone="${phone}"]`);
-      await fetch('/admin/contacts', {
+      await authFetch('/admin/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, name: input.value.trim() })
@@ -329,14 +416,26 @@ async function loadUsers() {
       setTimeout(() => (btn.textContent = original), 1200);
     });
   });
+
+  tbody.querySelectorAll('[data-delplayer]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const phone = btn.dataset.delplayer;
+      if (!confirm(`למחוק לצמיתות את השחקן ${phone}? כל התשובות, הניקוד והכינוי שלו יימחקו ולא ניתן לשחזר.`)) return;
+      await authFetch('/admin/players/' + phone, { method: 'DELETE' });
+      loadUsers();
+    });
+  });
 }
 
-// ===== ניקוד חי (ניקוד + מהירות) =====
+// ===================================================================
+// ניקוד חי
+// ===================================================================
 async function loadScores() {
   const [scoreRes, speedRes] = await Promise.all([
-    fetch('/admin/leaderboard'),
-    fetch('/admin/leaderboard-speed')
+    authFetch('/admin/leaderboard'),
+    authFetch('/admin/leaderboard-speed')
   ]);
+  if (!scoreRes.ok || !speedRes.ok) return;
   const scores = await scoreRes.json();
   const speed = await speedRes.json();
 
@@ -349,27 +448,81 @@ async function loadScores() {
   `).join('') || '<tr><td colspan="4" class="muted">אין עדיין נתונים</td></tr>';
 }
 
-// ===== מחוברים כרגע =====
+// ===================================================================
+// מחוברים כרגע
+// ===================================================================
 async function loadConnections() {
-  const res = await fetch('/admin/connected');
+  const res = await authFetch('/admin/connected');
+  if (!res.ok) return;
   const list = await res.json();
   document.querySelector('#connectionsTable tbody').innerHTML = list.map((p) => `
     <tr><td>${p.name || '—'}</td><td>${p.phone}</td><td>${new Date(p.connectedAt).toLocaleTimeString('he-IL')}</td></tr>
   `).join('') || '<tr><td colspan="3" class="muted">אין שחקנים מחוברים כרגע</td></tr>';
 }
 
-// ===== סטטוס ראשוני (בעת רענון עמוד) =====
+// ===================================================================
+// ניהול משחקים - רק לסיסמת-על
+// ===================================================================
+async function loadGames() {
+  const res = await authFetch('/admin/games');
+  if (!res.ok) return;
+  const games = await res.json();
+
+  document.querySelector('#gamesTable tbody').innerHTML = games.map((g) => `
+    <tr>
+      <td>${g.name}${g.isActive ? ' <span class="game-badge-active">פעיל</span>' : ''}</td>
+      <td>${!g.isActive ? `<button class="btn-mini" data-activate="${g._id}">הפעל</button>` : ''}</td>
+      <td>${!g.isActive ? `<button class="btn-mini" data-delgame="${g._id}">מחק</button>` : ''}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" class="muted">אין עדיין משחקים</td></tr>';
+
+  document.querySelectorAll('[data-activate]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('להפעיל את המשחק הזה? המשחק הפעיל הנוכחי (אם יש) ייסגר מיידית.')) return;
+    await authFetch('/admin/games/' + b.dataset.activate + '/activate', { method: 'POST' });
+  }));
+  document.querySelectorAll('[data-delgame]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('למחוק את המשחק הזה לצמיתות? כל השאלות, השחקנים והתשובות שלו יימחקו ולא ניתן לשחזר.')) return;
+    await authFetch('/admin/games/' + b.dataset.delgame, { method: 'DELETE' });
+    loadGames();
+  }));
+}
+
+document.getElementById('newGameForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('newGameName').value.trim();
+  const password = document.getElementById('newGamePassword').value;
+
+  const res = await authFetch('/admin/games', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, password })
+  });
+  if (res.ok) {
+    e.target.reset();
+    loadGames();
+  } else {
+    const err = await res.json();
+    alert('שגיאה: ' + (err.error || 'לא ידועה'));
+  }
+});
+
+// ===================================================================
+// סטטוס ראשוני (בעת רענון עמוד)
+// ===================================================================
 async function loadStatus() {
   const [statusRes, connectedRes] = await Promise.all([
-    fetch('/admin/status'),
-    fetch('/admin/connected')
+    authFetch('/admin/status'),
+    authFetch('/admin/connected')
   ]);
+  if (!statusRes.ok || !connectedRes.ok) return;
   const s = await statusRes.json();
   const connected = await connectedRes.json();
 
   activeCallIds.clear();
   connected.forEach((p) => activeCallIds.add(p.callId));
   updateConnectedCount();
+
+  if (s.activeGame) document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
 
   if (s.status === 'open' && s.currentQuestion) {
     document.getElementById('idleState').hidden = true;
@@ -383,6 +536,3 @@ async function loadStatus() {
 
   if (s.autoAdvance) setControlState('resumed');
 }
-
-loadQuestions();
-loadStatus();
