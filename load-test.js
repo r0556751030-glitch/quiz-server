@@ -1,9 +1,25 @@
-name: Load Test
-on: workflow_dispatch
-jobs:
-  k6:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: grafana/setup-k6-action@v1
-      - run: k6 run -e BASE_URL=https://quiz-server-ma5v.onrender.com load-test.js
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 10,
+  duration: '30s',
+};
+
+export default function () {
+  const baseUrl = __ENV.BASE_URL;
+
+  if (!baseUrl) {
+    throw new Error('BASE_URL is missing');
+  }
+
+  const response = http.get(baseUrl);
+
+  check(response, {
+    'status is 200': (res) => res.status === 200,
+    'response time is below 2 seconds': (res) =>
+      res.timings.duration < 2000,
+  });
+
+  sleep(1);
+}
