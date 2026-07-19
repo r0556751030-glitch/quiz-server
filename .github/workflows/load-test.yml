@@ -1,4 +1,4 @@
-name: Load Test
+name: load-test
 on: workflow_dispatch
 jobs:
   k6:
