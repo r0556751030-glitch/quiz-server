@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>חידון קליקרים - מסך חי</title>
+<link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+
+<div class="stage-root">
+
+  <!-- אייקון פתיחת סרגל ניהול - עדין, לא בולט לקהל -->
+  <button class="admin-toggle" id="adminToggle" title="ניהול">⚙</button>
+
+  <!-- סרגל ניהול נשלף (drawer) - סגור כברירת מחדל -->
+  <aside class="drawer" id="drawer">
+    <div class="drawer-header">
+      <span>🎛️ ניהול</span>
+      <button class="drawer-close" id="drawerClose">✕</button>
+    </div>
+
+    <nav class="drawer-nav">
+      <button class="nav-btn active" data-panel="questions">📋 ניהול שאלות</button>
+      <button class="nav-btn" data-panel="users">👤 ניהול משתמשים</button>
+      <button class="nav-btn" data-panel="scores">🏆 ניקוד חי</button>
+      <button class="nav-btn" data-panel="connections">📡 מחוברים כרגע</button>
+    </nav>
+
+    <div class="drawer-body">
+
+      <!-- ניהול שאלות -->
+      <section class="panel" id="panel-questions">
+        <div id="qlist"></div>
+
+        <form class="addq" id="addForm">
+          <label>טקסט השאלה</label>
+          <input type="text" id="qText" required placeholder="לדוגמה: מה בירת ישראל?">
+
+          <label>כמות אפשרויות</label>
+          <select id="optCount">
+            <option value="2">2</option><option value="3">3</option>
+            <option value="4" selected>4</option><option value="5">5</option><option value="6">6</option>
+          </select>
+
+          <div id="optionsWrap"></div>
+
+          <label>זמן מענה (שניות)</label>
+          <input type="number" id="qSeconds" value="15" min="3" max="120">
+
+          <button type="submit" class="btn-mini btn-block">➕ הוספת שאלה</button>
+        </form>
+      </section>
+
+      <!-- ניהול משתמשים - כינויים -->
+      <section class="panel" id="panel-users" hidden>
+        <table class="data-table" id="usersTable">
+          <thead><tr><th>טלפון</th><th>כינוי</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- ניקוד חי -->
+      <section class="panel" id="panel-scores" hidden>
+        <h3>לפי ניקוד</h3>
+        <table class="data-table" id="scoresTable">
+          <thead><tr><th>#</th><th>שם</th><th>ניקוד</th><th>סטטוס</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <h3>לפי מהירות (זמן ממוצע לתשובה נכונה)</h3>
+        <table class="data-table" id="speedTable">
+          <thead><tr><th>#</th><th>שם</th><th>זמן ממוצע</th><th>תשובות נכונות</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- מחוברים כרגע -->
+      <section class="panel" id="panel-connections" hidden>
+        <table class="data-table" id="connectionsTable">
+          <thead><tr><th>שם</th><th>טלפון</th><th>מחובר מאז</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+    </div>
+  </aside>
+  <div class="drawer-overlay" id="drawerOverlay" hidden></div>
+
+  <!-- ===== מסך ראשי מוקרן ===== -->
+  <main class="live-screen">
+
+    <div class="live-header">
+      <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
+      <span class="conn-dot off" id="connDot"></span>
+    </div>
+
+    <div class="question-stage" id="questionStage">
+
+      <div class="idle-state" id="idleState">ממתינים לשאלה הבאה...</div>
+
+      <div class="question-live" id="questionLive" hidden>
+        <div class="timer-wrap">
+          <svg class="timer-ring" viewBox="0 0 120 120">
+            <circle class="timer-ring-bg" cx="60" cy="60" r="54"></circle>
+            <circle class="timer-ring-fg" id="timerRing" cx="60" cy="60" r="54"></circle>
+          </svg>
+          <div class="timer-num" id="timerNum">10</div>
+        </div>
+        <h2 class="q-text" id="liveQText"></h2>
+        <div class="q-options" id="liveQOptions"></div>
+      </div>
+
+      <div class="question-results" id="questionResults" hidden>
+        <h2 class="q-text" id="resultsQText"></h2>
+        <div class="results-bars" id="resultsBars"></div>
+      </div>
+
+    </div>
+
+    <!-- טוסטים - הבזק שם כשעונים, בלי לחשוף מה נבחר -->
+    <div class="toast-stack" id="toastStack"></div>
+
+    <!-- כפתור בולט - חשיפת 3 מובילים -->
+    <button class="btn-top3" id="top3Btn">🏆 הצג 3 מובילים</button>
+    <div class="top3-overlay" id="top3Overlay" hidden>
+      <div class="top3-panel" id="top3Panel"></div>
+    </div>
+
+    <!-- כפתורי שליטה קטנים למנהל, גלויים אך לא בולטים -->
+    <div class="control-bar">
+      <button class="btn-mini" id="startBtn">▶ התחל</button>
+      <button class="btn-mini" id="pauseBtn" hidden>⏸ השהה</button>
+      <button class="btn-mini" id="closeBtn" hidden>⏹ סגור</button>
+    </div>
+
+  </main>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>
