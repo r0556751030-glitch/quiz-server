@@ -12,7 +12,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 // ===================================================================
 
 async function checkAuth() {
-  const res = await fetch('/admin/me');
+  const res = await fetch('/admin/me', { cache: 'no-store' });
   const data = await res.json();
   if (data.authenticated) onAuthenticated(data.role, data.gameName);
   else showLogin();
@@ -55,7 +55,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 // עוטף fetch לפעולות ניהול - אם השרת מחזיר 401 (session פג/לא קיים), חוזרים למסך login
 async function authFetch(url, options) {
-  const res = await fetch(url, options);
+  const res = await fetch(url, { cache: 'no-store', ...options });
   if (res.status === 401) {
     showLogin('פג תוקף ההתחברות - יש להתחבר מחדש');
   }

@@ -4,6 +4,42 @@
 <meta charset="UTF-8">
 <title>חידון קליקרים - מסך חי</title>
 <link rel="stylesheet" href="/css/dashboard.css">
+<style>
+  /* CSS קריטי מוטבע - לא תלוי בקובץ dashboard.css החיצוני, כדי שמסך ההתחברות
+     תמיד יעבוד גם אם ה-CSS החיצוני עוד לא מכיר את ה-class-ים האלה */
+  .login-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(5,5,10,0.94);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .login-panel {
+    background: #1a1a24;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    padding: 36px 40px;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    direction: rtl;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .login-title { color: #fff; font-size: 20px; text-align: center; margin: 0 0 6px; }
+  .login-input {
+    background: #2a2a38;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    color: #fff;
+    padding: 12px 14px;
+    font-size: 15px;
+    direction: rtl;
+  }
+  .login-error { color: #ff6b6b; font-size: 13px; text-align: center; min-height: 16px; }
+</style>
 </head>
 <body>
 
