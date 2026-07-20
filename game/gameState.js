@@ -21,16 +21,21 @@ const state = {
 const pendingResponses = new Map();
 
 function holdResponse(callId, phone, res, onClientHangup) {
-  pendingResponses.set(callId, { res, phone });
+    pendingResponses.set(callId, { res, phone });
 
-  const cleanup = () => {
-    const current = pendingResponses.get(callId);
-    if (current && current.res === res) {
-      pendingResponses.delete(callId);
-      if (onClientHangup) onClientHangup(callId);
-    }
-  };
-  res.req.once('close', cleanup);
+    const cleanup = () => {
+        const current = pendingResponses.get(callId);
+        if (current && current.res === res) {
+            pendingResponses.delete(callId);
+            if (onClientHangup) {
+                onClientHangup(callId);
+            }
+        }
+    };
+
+    // הקשבה מיידית לסגירה או ביטול הבקשה מצד הלקוח/הפרוקסי
+    res.req.once('close', cleanup);
+    res.req.once('aborted', cleanup);
 }
 
 function resolveResponse(callId, textBody) {

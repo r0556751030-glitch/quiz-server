@@ -2,110 +2,142 @@ const express = require('express');
 const router = express.Router();
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
+const Question = require('../models/Question');
 const Contact = require('../models/Contact');
-const { state, holdResponse, answerFieldName } = require('../game/gameState');
+const Game = require('../models/Game');
+const { state, holdResponse, pendingResponses, answerFieldName } = require('../game/gameState');
 
-// בונה את מחרוזת ה-read שנשלחת לימות
-// משתמש בקובץ שמע שקט (f-001) כדי לא להשמיע כלום ולעקוף את מנוע ה-TTS
-// שם המשתנה (answerFieldName) שונה בכל שאלה - ראו הסבר ב-gameState.js
-function buildReadCommand(question, remainingSeconds) {
-  const wait = Math.max(2, Math.round(remainingSeconds));
-  const allowedKeys = question.options.map((_, i) => i + 1).join(''); // לדוגמה "1234"
-  return `read=f-001=${answerFieldName(question)},,1,1,${wait},NO,yes,,,${allowedKeys},3,Ok,NOANSWER,,no`;
-}
+/**
+ * הנתיב הראשי לקבלת פניות ממערכת ימות המשיח
+ * POST / GET /yemot/api
+ */
+router.all('/api', async (req, res) => {
+    try {
+        const params = { ...req.query, ...req.body };
+        const { ApiCallId, ApiPhone } = params;
 
-async function markDisconnected(io, callId) {
-  await Player.updateOne({ callId }, { active: false });
-  io.emit('playerDisconnected', { callId });
-}
-
-// שולף את השם/כינוי המשויך למספר טלפון בתוך המשחק הנתון, אם קיים
-async function getContactName(gameId, phone) {
-  const contact = await Contact.findOne({ game: gameId, phone });
-  return contact ? contact.name : null;
-}
-
-router.post('/api', async (req, res) => {
-  try {
-    const { ApiCallId: callId, ApiPhone: phone, hangup } = req.body;
-    const io = req.app.get('io');
-
-    if (!callId) {
-      return res.type('text/plain').send('id_list_message=t-שגיאה טכנית, אנא נסו שוב מאוחר יותר');
-    }
-
-    // ===== ניתוק שיחה (מפורש, מגיע מ-ימות) =====
-    if (hangup === 'yes') {
-      await markDisconnected(io, callId);
-      return res.type('text/plain').send('');
-    }
-
-    // ===== אין משחק פעיל כרגע - אי אפשר לשבץ את השיחה לשום מקום =====
-    if (!state.activeGame) {
-      return res.type('text/plain').send('id_list_message=t-אין משחק פעיל כרגע, אנא נסו שוב מאוחר יותר');
-    }
-    const gameId = state.activeGame._id;
-
-    // ===== מציאה/יצירה של השחקן (לפי callId הייחודי לשיחה) =====
-    let player = await Player.findOne({ callId });
-    if (!player) {
-      player = await Player.create({ game: gameId, phone, callId });
-      const name = await getContactName(gameId, phone);
-      io.emit('playerConnected', { callId, phone, playerId: player._id, score: player.score, name });
-    } else if (!player.active) {
-      // שיחה חוזרת עם אותו callId שסומנה כמנותקת - מחזירים אותה לפעילה
-      player.active = true;
-      await player.save();
-    }
-
-    // ===== אם זו תשובה לשאלה פתוחה =====
-    let justAnswered = false;
-    if (state.status === 'open' && state.currentQuestion) {
-      const fieldName = answerFieldName(state.currentQuestion);
-      const answer = req.body[fieldName];
-
-      if (answer !== undefined) {
-        justAnswered = true;
-        const isCorrect = answer === String(state.currentQuestion.correctIndex + 1);
-        const responseTimeMs = Date.now() - state.openedAt;
-
-        try {
-          await Answer.create({
-            game: gameId,
-            player: player._id,
-            question: state.currentQuestion._id,
-            choice: answer,
-            isCorrect,
-            responseTimeMs
-          });
-          if (isCorrect) {
-            player.score += 10;
-            await player.save();
-          }
-          const name = await getContactName(gameId, phone);
-          io.emit('playerAnswered', {
-            callId, phone, playerId: player._id,
-            questionId: state.currentQuestion._id, choice: answer, isCorrect,
-            responseTimeMs, name
-          });
-        } catch (dupErr) {
-          // כבר נשלחה תשובה קודמת לאותה שאלה (unique index) - מתעלמים בשקט
+        if (!ApiCallId) {
+            return res.type('text/plain').send('id_list_message=t-שגיאה: לא התקבל מזהה שיחה');
         }
-      }
-    }
 
-    // ===== החלטה מה להשיב כרגע =====
-    if (state.status === 'open' && state.currentQuestion && !justAnswered) {
-      const elapsedSec = (Date.now() - state.openedAt) / 1000;
-      const remaining = state.currentQuestion.answerWindowSeconds - elapsedSec;
-      return res.type('text/plain').send(buildReadCommand(state.currentQuestion, remaining));
-    }
+        const io = req.app.get('io');
 
-    holdResponse(callId, phone, res, (disconnectedCallId) => markDisconnected(io, disconnectedCallId));
-  } catch (err) {
-    console.error('שגיאה בטיפול בבקשת ימות:', err);
-    res.type('text/plain').send('id_list_message=t-אירעה שגיאה, אנא נסו שוב');
-  }
+        // 1. זיהוי וטיפול מיידי באירוע ניתוק (Hangup)
+        const isHangup = params.hangup === 'yes' ||
+            params.hangup === '1' ||
+            params.ApiStatus === 'hangup';
+
+        if (isHangup) {
+            if (ApiCallId) {
+                await Player.findOneAndUpdate({ callId: ApiCallId }, { active: false });
+                pendingResponses.delete(ApiCallId);
+                if (io) {
+                    io.emit('playerDisconnected', { callId: ApiCallId });
+                }
+            }
+            return res.type('text/plain').send('id_list_message=');
+        }
+
+        // 2. בדיקה האם קיים משחק פעיל
+        if (!state.activeGame) {
+            return res.type('text/plain').send('id_list_message=t-אין משחק פעיל כרגע.&goto=/');
+        }
+
+        const gameId = state.activeGame._id;
+
+        // 3. רישום / עדכון סטטוס השחקן
+        let player = await Player.findOne({ callId: ApiCallId });
+        if (!player) {
+            player = await Player.create({
+                game: gameId,
+                phone: ApiPhone || '0000000000',
+                callId: ApiCallId,
+                active: true,
+                connectedAt: new Date()
+            });
+
+            if (io) {
+                io.emit('playerConnected', player);
+            }
+        } else if (!player.active) {
+            player.active = true;
+            await player.save();
+            if (io) {
+                io.emit('playerConnected', player);
+            }
+        }
+
+        // 4. במידה ויש שאלה פתוחה - בדיקה והקלטת תשובה
+        if (state.status === 'open' && state.currentQuestion) {
+            const q = state.currentQuestion;
+            const fieldName = answerFieldName(q);
+            const userChoice = params[fieldName] || params.val;
+
+            if (userChoice !== undefined && userChoice !== '') {
+                const choiceIndex = parseInt(userChoice, 10) - 1; // המרה ממקש 1-9 לאינדקס 0-based
+                const isCorrect = choiceIndex === q.correctIndex;
+                const responseTimeMs = Date.now() - state.openedAt;
+
+                // שמירת/עדכון התשובה במסד הנתונים
+                await Answer.findOneAndUpdate(
+                    { player: player._id, question: q._id },
+                    {
+                        game: gameId,
+                        player: player._id,
+                        question: q._id,
+                        choice: userChoice,
+                        isCorrect,
+                        responseTimeMs,
+                        answeredAt: new Date()
+                    },
+                    { upsert: true, new: true }
+                );
+
+                if (isCorrect) {
+                    player.score = (player.score || 0) + 10;
+                    await player.save();
+                }
+
+                if (io) {
+                    io.emit('answerReceived', {
+                        playerId: player._id,
+                        questionId: q._id,
+                        isCorrect,
+                        score: player.score
+                    });
+                }
+
+                // העברת השיחה להמתנה עד השאלה הבאה
+                res.setHeader('X-Accel-Buffering', 'no');
+                res.setHeader('Cache-Control', 'no-cache, no-transform');
+
+                holdResponse(ApiCallId, player.phone, res, async (disconnectedCallId) => {
+                    await Player.findOneAndUpdate({ callId: disconnectedCallId }, { active: false });
+                    if (io) io.emit('playerDisconnected', { callId: disconnectedCallId });
+                });
+
+                return;
+            }
+
+            // אם טרם התקבלה תשובה - שליחת פקודת קליטת מקשים (read) לימות המשיח
+            const numOptions = q.options ? q.options.length : 4;
+            const responseText = `read=t-אנא בחר את התשובה הנכונה.1,${fieldName},${q.answerWindowSeconds || 15},1,${numOptions},#,#,no,no,no,no`;
+            return res.type('text/plain').send(responseText);
+        }
+
+        // 5. במידה ואין שאלה פתוחה כרגע - החזקת השיחה פתוחה (Hold)
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+
+        holdResponse(ApiCallId, player.phone, res, async (disconnectedCallId) => {
+            await Player.findOneAndUpdate({ callId: disconnectedCallId }, { active: false });
+            if (io) io.emit('playerDisconnected', { callId: disconnectedCallId });
+        });
+
+    } catch (err) {
+        console.error('Error handling Yemot request:', err);
+        res.type('text/plain').send('id_list_message=t-אירעה שגיאה במערכת');
+    }
 });
 
 module.exports = router;

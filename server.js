@@ -97,5 +97,14 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
   console.log(`🚀 השרת רץ על פורט ${PORT}`);
 });
-
+// מנגנון ניקוי תקופתי לבדיקת חיבורים תקועים כל 10 שניות
+setInterval(async () => {
+    for (const [callId, item] of pendingResponses.entries()) {
+        if (item.res.writableEnded || item.res.req.destroyed || item.res.req.socket?.destroyed) {
+            pendingResponses.delete(callId);
+            await Player.findOneAndUpdate({ callId }, { active: false });
+            io.emit('playerDisconnected', { callId });
+        }
+    }
+}, 10000);
 module.exports = { app, server, io };
