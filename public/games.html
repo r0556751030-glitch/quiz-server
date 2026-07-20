@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>המשחקים שלי - חידון קליקרים</title>
+<style>
+  :root {
+    --bg: #0b0716; --panel: #130c28; --panel-2: #1a1233;
+    --border: rgba(245,158,11,0.25); --gold: #f59e0b; --gold-light: #fcd34d;
+    --text: #f3eefe; --muted: #c4b8e8; --green: #34d399; --red: #ff8686;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; font-family: -apple-system, "Segoe UI", Assistant, Arial, sans-serif;
+    color: var(--text); background: var(--bg); padding-bottom: 60px;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 5vw; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .brand { font-weight: 800; font-size: 18px; }
+  .who { display: flex; align-items: center; gap: 14px; font-size: 14px; color: var(--muted); }
+  .btn {
+    background: var(--panel-2); border: 1px solid rgba(255,255,255,0.16); color: var(--text);
+    padding: 9px 16px; border-radius: 9px; font-size: 13.5px; cursor: pointer; font-weight: 600;
+  }
+  .btn.gold { background: var(--gold); color: #1a1233; border-color: var(--gold); }
+  .btn.danger { border-color: rgba(255,120,120,0.4); color: var(--red); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  main { max-width: 900px; margin: 0 auto; padding: 34px 5vw; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 26px; }
+
+  .create-row {
+    display: flex; gap: 10px; margin-bottom: 26px;
+  }
+  .create-row input {
+    flex: 1; background: var(--panel-2); border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 9px; color: var(--text); padding: 11px 14px; font-size: 14.5px; direction: rtl;
+  }
+
+  .game-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .game-name { font-weight: 700; font-size: 16px; flex: 1; min-width: 160px; }
+  .game-name input {
+    background: var(--panel-2); border: 1px solid rgba(255,255,255,0.2); border-radius: 7px;
+    color: var(--text); padding: 6px 10px; font-size: 14.5px; width: 100%; direction: rtl;
+  }
+  .status-pill {
+    font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 30px;
+  }
+  .status-pill.live { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.4); }
+  .status-pill.off { background: rgba(255,255,255,0.06); color: var(--muted); border: 1px solid rgba(255,255,255,0.12); }
+  .owner-tag { font-size: 12px; color: var(--muted); }
+
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+
+  table.users-table {
+    width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;
+  }
+  table.users-table th, table.users-table td {
+    text-align: right; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  table.users-table th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+
+  h2.section-title { font-size: 16px; margin: 40px 0 14px; color: var(--gold-light); }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand">📻 חידון קליקרים</div>
+    <div class="who">
+      <span id="whoami"></span>
+      <button class="btn" id="logoutBtn">🚪 יציאה</button>
+    </div>
+  </div>
+
+  <main>
+    <h1 id="pageTitle">המשחקים שלי</h1>
+    <p class="sub" id="pageSub">צרו משחק חדש, ערכו שאלות, והפעילו אותו כשמוכנים.</p>
+
+    <form class="create-row" id="createForm">
+      <input type="text" id="newGameName" placeholder="שם משחק חדש (לדוגמה: פורים 2026)" required>
+      <button type="submit" class="btn gold">➕ צור משחק</button>
+    </form>
+
+    <div id="gamesList"></div>
+
+    <div id="adminSection" hidden>
+      <h2 class="section-title">👥 כל המשתמשים בפלטפורמה</h2>
+      <table class="users-table">
+        <thead><tr><th>שם משתמש</th><th>מספר משחקים</th><th>נרשם בתאריך</th></tr></thead>
+        <tbody id="usersTbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+<script>
+let myRole = null;
+
+async function init() {
+  const me = await (await fetch('/admin/me')).json();
+  if (!me.authenticated) { location.href = '/'; return; }
+  myRole = me.role;
+
+  document.getElementById('whoami').textContent = me.role === 'admin' ? '🔐 מנהל מערכת' : `👤 ${me.username}`;
+  if (me.role === 'admin') {
+    document.getElementById('pageTitle').textContent = 'כל המשחקים בפלטפורמה';
+    document.getElementById('pageSub').textContent = 'כמנהל מערכת אתה רואה ויכול לנהל את כל המשחקים של כל המשתמשים.';
+    document.getElementById('createForm').hidden = true;
+    document.getElementById('adminSection').hidden = false;
+    loadUsers();
+  }
+  loadGames();
+}
+
+async function loadGames() {
+  const res = await fetch('/games');
+  const games = await res.json();
+  const list = document.getElementById('gamesList');
+
+  if (!games.length) {
+    list.innerHTML = '<div class="empty">עדיין אין משחקים. צרו את הראשון למעלה 👆</div>';
+    return;
+  }
+
+  list.innerHTML = games.map((g) => `
+    <div class="game-card" data-id="${g._id}">
+      <div class="game-name">
+        <span class="view-name">${g.name}</span>
+        ${myRole === 'admin' ? `<div class="owner-tag">בעלים: ${g.ownerUsername || '—'}</div>` : ''}
+      </div>
+      <span class="status-pill ${g.isActive ? 'live' : 'off'}">${g.isActive ? '🟢 חי כרגע' : 'לא פעיל'}</span>
+      ${g.isActive ? '<button class="btn gold" onclick="location.href=\'/admin.html\'">🎬 פתח מסך חי</button>' : ''}
+      <button class="btn" data-act="activate" ${g.isActive ? 'disabled' : ''}>▶ הפעל</button>
+      <button class="btn" data-act="deactivate" ${g.isActive ? '' : 'disabled'}>⏸ הפסק</button>
+      <button class="btn" data-act="rename">✏️ שנה שם</button>
+      <button class="btn danger" data-act="delete" ${g.isActive ? 'disabled' : ''}>🗑️ מחק</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.game-card').forEach((card) => {
+    const id = card.dataset.id;
+    card.querySelector('[data-act="activate"]').addEventListener('click', () => activate(id));
+    card.querySelector('[data-act="deactivate"]').addEventListener('click', () => deactivate(id));
+    card.querySelector('[data-act="rename"]').addEventListener('click', () => rename(id, card));
+    card.querySelector('[data-act="delete"]').addEventListener('click', () => del(id));
+  });
+}
+
+async function activate(id) {
+  const res = await fetch(`/games/${id}/activate`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'שגיאה בהפעלת המשחק'); return; }
+  loadGames();
+}
+async function deactivate(id) {
+  await fetch(`/games/${id}/deactivate`, { method: 'POST' });
+  loadGames();
+}
+function rename(id, card) {
+  const span = card.querySelector('.view-name');
+  const current = span.textContent;
+  span.outerHTML = `<input type="text" class="rename-input" value="${current}">`;
+  const input = card.querySelector('.rename-input');
+  input.focus();
+  input.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    await fetch(`/games/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: input.value.trim() })
+    });
+    loadGames();
+  });
+}
+async function del(id) {
+  if (!confirm('למחוק את המשחק לצמיתות? כל השאלות, השחקנים והתשובות יימחקו ולא ניתן לשחזר.')) return;
+  const res = await fetch(`/games/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'שגיאה במחיקה'); return; }
+  loadGames();
+}
+
+async function loadUsers() {
+  const res = await fetch('/games/admin/users');
+  if (!res.ok) return;
+  const users = await res.json();
+  document.getElementById('usersTbody').innerHTML = users.map((u) => `
+    <tr>
+      <td>${u.username}</td>
+      <td>${u.gameCount}</td>
+      <td>${new Date(u.createdAt).toLocaleDateString('he-IL')}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('createForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('newGameName').value.trim();
+  if (!name) return;
+  const res = await fetch('/games', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'שגיאה ביצירת המשחק'); return; }
+  document.getElementById('newGameName').value = '';
+  loadGames();
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/admin/logout', { method: 'POST' });
+  location.href = '/';
+});
+
+init();
+</script>
+</body>
+</html>

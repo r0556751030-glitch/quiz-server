@@ -10,64 +10,59 @@
  */
 
 const state = {
-    status: 'idle',        // idle | open
-    currentQuestion: null,  // מסמך Question המלא של השאלה הפתוחה כרגע
-    openedAt: null,          // Date.now() של רגע פתיחת השאלה
-    autoAdvance: false,      // האם המשחק רץ ברצף אוטומטי כרגע
-    playersAtOpen: 0,        // כמות שחקנים מחוברים ברגע פתיחת השאלה - לחישוב אחוז "לא ענה" בתוצאות
-    activeGame: null,        // { _id, name, slug } של המשחק הפעיל, או null אם אין משחק פעיל כלל
+  status: 'idle',        // idle | open
+  currentQuestion: null,  // מסמך Question המלא של השאלה הפתוחה כרגע
+  openedAt: null,          // Date.now() של רגע פתיחת השאלה
+  autoAdvance: false,      // האם המשחק רץ ברצף אוטומטי כרגע
+  playersAtOpen: 0,        // כמות שחקנים מחוברים ברגע פתיחת השאלה - לחישוב אחוז "לא ענה" בתוצאות
+  activeGame: null,        // { _id, name, slug } של המשחק הפעיל, או null אם אין משחק פעיל כלל
 };
 
 const pendingResponses = new Map();
 
 function holdResponse(callId, phone, res, onClientHangup) {
-    pendingResponses.set(callId, { res, phone });
+  pendingResponses.set(callId, { res, phone });
 
-    const cleanup = () => {
-        const current = pendingResponses.get(callId);
-        if (current && current.res === res) {
-            pendingResponses.delete(callId);
-            if (onClientHangup) {
-                onClientHangup(callId);
-            }
-        }
-    };
-
-    // הקשבה מיידית לסגירה או ביטול הבקשה מצד הלקוח/הפרוקסי
-    res.req.once('close', cleanup);
-    res.req.once('aborted', cleanup);
+  const cleanup = () => {
+    const current = pendingResponses.get(callId);
+    if (current && current.res === res) {
+      pendingResponses.delete(callId);
+      if (onClientHangup) onClientHangup(callId);
+    }
+  };
+  res.req.once('close', cleanup);
 }
 
 function resolveResponse(callId, textBody) {
-    const pending = pendingResponses.get(callId);
-    if (pending) {
-        pending.res.type('text/plain').send(textBody);
-        pendingResponses.delete(callId);
-    }
+  const pending = pendingResponses.get(callId);
+  if (pending) {
+    pending.res.type('text/plain').send(textBody);
+    pendingResponses.delete(callId);
+  }
 }
 
 function resolveAll(textBody) {
-    for (const callId of Array.from(pendingResponses.keys())) {
-        resolveResponse(callId, textBody);
-    }
+  for (const callId of Array.from(pendingResponses.keys())) {
+    resolveResponse(callId, textBody);
+  }
 }
 
 function answerFieldName(question) {
-    return `ans_${question._id}`;
+  return `ans_${question._id}`;
 }
 
 // נקרא בעליית שרת ובכל החלפת משחק פעיל - תמיד מאפס את מצב המשחק החי
 // כדי שלא "יידלף" מצב (שאלה פתוחה, ניקוד רגעי) מהמשחק הקודם למשחק החדש.
 function setActiveGame(game) {
-    state.activeGame = game ? { _id: game._id, name: game.name, slug: game.slug } : null;
-    state.status = 'idle';
-    state.currentQuestion = null;
-    state.openedAt = null;
-    state.autoAdvance = false;
-    state.playersAtOpen = 0;
+  state.activeGame = game ? { _id: game._id, name: game.name, slug: game.slug, owner: game.owner } : null;
+  state.status = 'idle';
+  state.currentQuestion = null;
+  state.openedAt = null;
+  state.autoAdvance = false;
+  state.playersAtOpen = 0;
 }
 
 module.exports = {
-    state, pendingResponses, holdResponse, resolveResponse, resolveAll,
-    answerFieldName, setActiveGame
+  state, pendingResponses, holdResponse, resolveResponse, resolveAll,
+  answerFieldName, setActiveGame
 };
