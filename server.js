@@ -11,8 +11,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const authRoutes = require('./routes/authRoutes');
 const Player = require('./models/Player');
 const Game = require('./models/Game');
-const { setActiveGame } = require('./game/gameState');
-
+const { setActiveGame, pendingResponses } = require('./game/gameState');
 // ===== הגדרות בסיסיות =====
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/clicker-db';
