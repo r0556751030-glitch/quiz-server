@@ -185,12 +185,62 @@ socket.on('questionResults', (r) => {
 
 socket.on('gamePaused', () => setControlState('paused'));
 socket.on('gameResumed', () => setControlState('resumed'));
-socket.on('gameFinished', () => {
+
+// ===================================================================
+// מסך תוצאות סופיות - בסיום משחק (רצף אוטומטי או כפתור "סיים משחק")
+// ===================================================================
+socket.on('gameEnded', ({ results }) => {
   document.getElementById('questionLive').hidden = true;
   document.getElementById('questionResults').hidden = true;
   const idle = document.getElementById('idleState');
   idle.hidden = false;
-  idle.textContent = '🏁 המשחק הסתיים!';
+  idle.textContent = '🏁 המשחק הסתיים';
+
+  showFinalResults(results);
+});
+
+function showFinalResults(results) {
+  const medals = ['🥇', '🥈', '🥉'];
+  const top3 = results.slice(0, 3);
+
+  const top3El = document.getElementById('finalTop3');
+  top3El.innerHTML = top3.length
+    ? top3.map((p, i) => `
+        <div class="top3-row rank-${i + 1}" style="animation-delay:${i * 0.25}s">
+          <span class="top3-medal">${medals[i]}</span>
+          <span class="top3-name">${p.name || p.phone}</span>
+          <span class="top3-score">${p.score} נק'</span>
+        </div>`).join('')
+    : '<div class="muted">לא נאספו תוצאות במשחק הזה</div>';
+
+  const tbody = document.querySelector('#finalFullTable tbody');
+  tbody.innerHTML = results.map((p) => `
+    <tr>
+      <td class="rank">${p.rank}</td>
+      <td>${p.name || p.phone}</td>
+      <td>${p.score}</td>
+      <td>${p.correctAnswers}</td>
+      <td>${p.avgResponseTimeMs != null ? (p.avgResponseTimeMs / 1000).toFixed(1) + " שנ'" : '—'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="muted">אין נתונים</td></tr>';
+
+  document.getElementById('finalFullTable').hidden = true;
+  document.getElementById('toggleFullResults').textContent = '📋 הצג טבלה מלאה';
+  document.getElementById('finalOverlay').hidden = false;
+}
+
+document.getElementById('toggleFullResults').addEventListener('click', () => {
+  const table = document.getElementById('finalFullTable');
+  table.hidden = !table.hidden;
+  document.getElementById('toggleFullResults').textContent = table.hidden ? '📋 הצג טבלה מלאה' : '🔼 הסתר טבלה';
+});
+document.getElementById('closeFinalOverlay').addEventListener('click', () => {
+  document.getElementById('finalOverlay').hidden = true;
+});
+
+document.getElementById('endGameBtn').addEventListener('click', async () => {
+  if (!confirm('לסיים את המשחק עכשיו ולעבור למסך התוצאות הסופיות?')) return;
+  await authFetch('/admin/end-game', { method: 'POST' });
 });
 
 // ===================================================================
@@ -394,7 +444,7 @@ async function loadUsers() {
   contacts.forEach((c) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${c.phone}</td>
+      <td>${c.phone}${c.hasCalled ? '' : ' <span class="muted">(טרם התקשר)</span>'}</td>
       <td><input type="text" class="nick-input" value="${c.name || ''}" placeholder="כינוי..." data-phone="${c.phone}"></td>
       <td><button class="btn-mini" data-save="${c.phone}">שמור</button></td>
       <td><button class="btn-mini" data-delplayer="${c.phone}">מחק שחקן</button></td>
@@ -426,6 +476,24 @@ async function loadUsers() {
     });
   });
 }
+
+document.getElementById('addPlayerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const phone = document.getElementById('newPlayerPhone').value.trim();
+  const name = document.getElementById('newPlayerName').value.trim();
+  const res = await authFetch('/admin/contacts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, name })
+  });
+  if (res.ok) {
+    e.target.reset();
+    loadUsers();
+  } else {
+    const err = await res.json();
+    alert('שגיאה: ' + (err.error || 'לא ידועה'));
+  }
+});
 
 // ===================================================================
 // ניקוד חי

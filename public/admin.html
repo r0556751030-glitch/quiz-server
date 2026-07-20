@@ -98,8 +98,15 @@
         </form>
       </section>
 
-      <!-- ניהול משתמשים - כינויים + מחיקה -->
+      <!-- ניהול משתמשים - כינויים + מחיקה + הוספה ידנית -->
       <section class="panel" id="panel-users" hidden>
+        <form class="addq" id="addPlayerForm">
+          <label>הוספת שחקן ידנית (טרם התקשר)</label>
+          <input type="tel" id="newPlayerPhone" required placeholder="מספר טלפון">
+          <input type="text" id="newPlayerName" required placeholder="כינוי">
+          <button type="submit" class="btn-mini btn-block">➕ הוספת שחקן</button>
+        </form>
+
         <table class="data-table" id="usersTable">
           <thead><tr><th>טלפון</th><th>כינוי</th><th></th><th></th></tr></thead>
           <tbody></tbody>
@@ -195,11 +202,29 @@
       <div class="top3-panel" id="top3Panel"></div>
     </div>
 
+    <!-- מסך תוצאות סופיות - עולה אוטומטית בסיום משחק (רצף אוטומטי או "סיים משחק") -->
+    <div class="final-overlay" id="finalOverlay" hidden>
+      <div class="final-panel">
+        <div class="final-badge">🏁 המשחק הסתיים</div>
+        <h2 class="top3-title">התוצאות הסופיות</h2>
+        <div id="finalTop3"></div>
+
+        <button class="btn-mini" id="toggleFullResults">📋 הצג טבלה מלאה</button>
+        <table class="data-table final-full-table" id="finalFullTable" hidden>
+          <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <button class="btn-mini btn-block" id="closeFinalOverlay">✕ סגירה</button>
+      </div>
+    </div>
+
     <!-- כפתורי שליטה קטנים למנהל, גלויים אך לא בולטים -->
     <div class="control-bar">
       <button class="btn-mini" id="startBtn">▶ התחל</button>
       <button class="btn-mini" id="pauseBtn" hidden>⏸ השהה</button>
       <button class="btn-mini" id="closeBtn" hidden>⏹ סגור</button>
+      <button class="btn-mini" id="endGameBtn">🏁 סיים משחק</button>
     </div>
 
   </main>

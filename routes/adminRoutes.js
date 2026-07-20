@@ -152,8 +152,66 @@ async function advanceToNext(app, prevQuestion) {
     await openQuestion(app, next);
   } else {
     state.autoAdvance = false;
-    app.get('io').emit('gameFinished', {});
+    await finishGame(app, prevQuestion.game);
   }
+}
+
+// ===== בונה את תוצאות הסיום המלאות: ניקוד, תשובות נכונות, זמן תגובה ממוצע =====
+// לכל שחקן, כולל שחקנים שנוספו ידנית ומעולם לא התקשרו (ניקוד 0).
+async function buildFinalResults(gameId) {
+  const playersAgg = await Player.aggregate([
+    { $match: { game: gameId } },
+    { $group: { _id: '$phone', score: { $sum: '$score' }, active: { $max: { $cond: ['$active', 1, 0] } }, playerIds: { $push: '$_id' } } }
+  ]);
+
+  const allPlayerIds = playersAgg.flatMap((p) => p.playerIds);
+  const answerAgg = await Answer.aggregate([
+    { $match: { game: gameId, player: { $in: allPlayerIds } } },
+    { $lookup: { from: 'players', localField: 'player', foreignField: '_id', as: 'pl' } },
+    { $unwind: '$pl' },
+    { $group: {
+        _id: '$pl.phone',
+        correctAnswers: { $sum: { $cond: ['$isCorrect', 1, 0] } },
+        correctTimeSum: { $sum: { $cond: ['$isCorrect', '$responseTimeMs', 0] } },
+        correctTimeCount: { $sum: { $cond: ['$isCorrect', 1, 0] } }
+    }}
+  ]);
+  const answerMap = new Map(answerAgg.map((a) => [a._id, a]));
+
+  const contacts = await Contact.find({ game: gameId });
+  const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
+
+  const known = playersAgg.map((p) => {
+    const a = answerMap.get(p._id) || { correctAnswers: 0, correctTimeCount: 0, correctTimeSum: 0 };
+    return {
+      phone: p._id,
+      name: nameMap.get(p._id) || null,
+      score: p.score,
+      active: !!p.active,
+      correctAnswers: a.correctAnswers,
+      avgResponseTimeMs: a.correctTimeCount ? Math.round(a.correctTimeSum / a.correctTimeCount) : null
+    };
+  });
+
+  const knownPhones = new Set(known.map((k) => k.phone));
+  const manualOnly = contacts
+    .filter((c) => !knownPhones.has(c.phone))
+    .map((c) => ({ phone: c.phone, name: c.name || null, score: 0, active: false, correctAnswers: 0, avgResponseTimeMs: null }));
+
+  const combined = [...known, ...manualOnly].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const at = a.avgResponseTimeMs ?? Infinity;
+    const bt = b.avgResponseTimeMs ?? Infinity;
+    return at - bt;
+  });
+
+  return combined.map((p, i) => ({ rank: i + 1, ...p }));
+}
+
+// ===== מסיימת את המשחק: עוצרת כל טיימר, מחשבת תוצאות סופיות, ומשדרת למסך =====
+async function finishGame(app, gameId) {
+  const results = await buildFinalResults(gameId);
+  app.get('io').emit('gameEnded', { results });
 }
 
 router.post('/open-question/:id', async (req, res) => {
@@ -204,6 +262,34 @@ router.post('/close-question', async (req, res) => {
   res.json({ success: true });
 });
 
+// ===== סיום משחק ידני - כפתור "סיים משחק" =====
+// עוצר כל טיימר פעיל, סוגר שאלה פתוחה אם יש כזו (עם התוצאות שלה), ואז משדר
+// את מסך התוצאות הסופיות - בדיוק כמו סיום אוטומטי בתום רצף השאלות.
+router.post('/end-game', async (req, res) => {
+  if (closeTimer) clearTimeout(closeTimer);
+  if (advanceTimer) clearTimeout(advanceTimer);
+
+  const question = state.currentQuestion;
+  if (question && state.status === 'open') {
+    state.status = 'idle';
+    req.app.get('io').emit('questionClosed', { questionId: question._id });
+    await computeAndEmitResults(req.app, question);
+  }
+
+  state.autoAdvance = false;
+  state.status = 'idle';
+  state.currentQuestion = null;
+
+  await finishGame(req.app, req.gameId);
+  res.json({ success: true });
+});
+
+// ===== תוצאות סופיות מלאות (לוח מובילים מלא למנהל, אחרי סיום משחק) =====
+router.get('/final-results', async (req, res) => {
+  const results = await buildFinalResults(req.gameId);
+  res.json(results);
+});
+
 // ===== לוח מובילים לפי ניקוד =====
 router.get('/leaderboard', async (req, res) => {
   const players = await Player.aggregate([
@@ -215,10 +301,19 @@ router.get('/leaderboard', async (req, res) => {
         pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$phone', '$$phone'] }, { $eq: ['$game', req.gameId] }] } } }],
         as: 'contact'
     }},
-    { $project: { phone: '$_id', score: 1, active: { $eq: ['$active', 1] }, name: { $arrayElemAt: ['$contact.name', 0] }, _id: 0 } },
-    { $sort: { score: -1 } }
+    { $project: { phone: '$_id', score: 1, active: { $eq: ['$active', 1] }, name: { $arrayElemAt: ['$contact.name', 0] }, _id: 0 } }
   ]);
-  res.json(players);
+
+  // שחקנים שנוספו ידנית (יש להם Contact אבל מעולם לא באמת התקשרו) - מוצגים עם
+  // ניקוד 0 וסימון "לא מחובר", לפי הדרישה שלא ייעלמו מהרשימה הרגילה.
+  const knownPhones = new Set(players.map((p) => p.phone));
+  const allContacts = await Contact.find({ game: req.gameId });
+  const manualOnly = allContacts
+    .filter((c) => !knownPhones.has(c.phone))
+    .map((c) => ({ phone: c.phone, score: 0, active: false, name: c.name || null }));
+
+  const combined = [...players, ...manualOnly].sort((a, b) => b.score - a.score);
+  res.json(combined);
 });
 
 // ===== לוח מובילים לפי מהירות =====
@@ -243,20 +338,38 @@ router.get('/leaderboard-speed', async (req, res) => {
 // ===== רשימת שחקנים מחוברים כרגע =====
 router.get('/connected', async (req, res) => {
   const active = await Player.find({ active: true, game: req.gameId }).sort({ connectedAt: -1 });
-  const phones = active.map((p) => p.phone);
+
+  // הגנה כפולה: גם אם משום מה נשארו כמה רשומות "פעילות" לאותו טלפון (למשל דאטה
+  // ישן שנוצר לפני תיקון הבאג של ניתוקים כפולים) - מציגים רק את השיחה העדכנית ביותר.
+  const latestByPhone = new Map();
+  for (const p of active) {
+    if (!latestByPhone.has(p.phone)) latestByPhone.set(p.phone, p);
+  }
+  const deduped = Array.from(latestByPhone.values());
+
+  const phones = deduped.map((p) => p.phone);
   const contacts = await Contact.find({ game: req.gameId, phone: { $in: phones } });
   const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
 
-  res.json(active.map((p) => ({ phone: p.phone, name: nameMap.get(p.phone) || null, connectedAt: p.connectedAt, callId: p.callId })));
+  res.json(deduped.map((p) => ({ phone: p.phone, name: nameMap.get(p.phone) || null, connectedAt: p.connectedAt, callId: p.callId })));
 });
 
 // ===== ניהול כינויים =====
 
 router.get('/contacts', async (req, res) => {
-  const phones = await Player.distinct('phone', { game: req.gameId });
-  const contacts = await Contact.find({ game: req.gameId, phone: { $in: phones } });
+  const playerPhones = new Set(await Player.distinct('phone', { game: req.gameId }));
+  const contacts = await Contact.find({ game: req.gameId });
   const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
-  res.json(phones.map((phone) => ({ phone, name: nameMap.get(phone) || null })));
+
+  // איחוד: כל טלפון שהתקשר בפועל + כל טלפון שיש לו כינוי שמור (גם אם עוד לא התקשר),
+  // כדי ששחקן שנוסף ידנית לא "ייעלם" מהרשימה ברגע שנוצר, לפני שהתקשר בפועל.
+  const allPhones = new Set([...playerPhones, ...contacts.map((c) => c.phone)]);
+
+  res.json(Array.from(allPhones).map((phone) => ({
+    phone,
+    name: nameMap.get(phone) || null,
+    hasCalled: playerPhones.has(phone)
+  })));
 });
 
 router.post('/contacts', async (req, res) => {
