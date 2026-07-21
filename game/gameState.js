@@ -5,9 +5,10 @@
  */
 
 const CONFIG = {
-    POLL_SECONDS: 4,         // wait שנשלח לימות כשאין שאלה פתוחה (לובי)
-    STALE_TIMEOUT_MS: 12000, // בלי פינג מעבר לזה = מנותק בפועל
-    SWEEP_INTERVAL_MS: 4000  // תדירות סריקת הניתוקים
+    POLL_SECONDS: 4,                     // wait שנשלח לימות כשאין שאלה פתוחה (לובי)
+    IDLE_STALE_TIMEOUT_MS: 12000,        // בלובי, בלי פינג מעבר לזה = מנותק בפועל
+    OPEN_QUESTION_STALE_BUFFER_MS: 8000, // מרווח ביטחון מעבר לחלון התשובה של השאלה
+    SWEEP_INTERVAL_MS: 4000
 };
 
 const state = {
@@ -28,15 +29,24 @@ function touch(callId) {
 function forget(callId) {
     lastSeen.delete(callId);
 }
+// שחקן ששותק (בלי ללחוץ) לאורך כל חלון התשובה של שאלה פתוחה זה תקין, לא ניתוק -
+// הטלפון שלו נמצא לגיטימית בתוך read= ארוך (עד answerWindowSeconds) בלי לפנות
+// לשרת. הסף חייב לכסות את חלון השאלה האחרונה שנפתחה, לא רק את מרווח ה-poll.
+function getStaleThresholdMs() {
+    const openWindowMs = state.currentQuestion ? state.currentQuestion.answerWindowSeconds * 1000 : 0;
+    return Math.max(CONFIG.IDLE_STALE_TIMEOUT_MS, openWindowMs + CONFIG.OPEN_QUESTION_STALE_BUFFER_MS);
+}
 
 function getStaleCallIds() {
     const now = Date.now();
+    const threshold = getStaleThresholdMs();
     const stale = [];
     for (const [callId, ts] of lastSeen.entries()) {
-        if (now - ts > CONFIG.STALE_TIMEOUT_MS) stale.push(callId);
+        if (now - ts > threshold) stale.push(callId);
     }
     return stale;
 }
+
 
 // no-op לתאימות לאחור: adminRoutes.js קורא לזה ב-openQuestion. אין יותר תשובות
 // תלויות להשלים - כל שחקן יקבל את השאלה הפתוחה בפינג הקצר הבא שלו ממילא.

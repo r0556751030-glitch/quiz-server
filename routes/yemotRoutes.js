@@ -27,6 +27,17 @@ async function getContactName(gameId, phone) {
     const contact = await Contact.findOne({ game: gameId, phone });
     return contact ? contact.name : null;
 }
+// המקש הראשון עלול להגיע תחת שם שדה "ישן" (poll, או שאלה קודמת) - כי הטלפון
+// עדיין היה בתוך read= קודם ברגע שהשאלה נפתחה/התחלפה. מקבלים אותו כתשובה תקפה
+// כל עוד הוא מספר אפשרות חוקי עבור השאלה הפתוחה כרגע.
+function extractLooseDigit(body) {
+    for (const key of Object.keys(body)) {
+        if ((key === 'poll' || key.startsWith('ans_')) && body[key] !== undefined && body[key] !== '') {
+            return body[key];
+        }
+    }
+    return undefined;
+}
 
 router.post('/api', async (req, res) => {
     try {
@@ -68,10 +79,18 @@ router.post('/api', async (req, res) => {
             await player.save();
         }
 
+
         let justAnswered = false;
         if (state.status === 'open' && state.currentQuestion) {
             const fieldName = answerFieldName(state.currentQuestion);
-            const answer = req.body[fieldName];
+            let answer = req.body[fieldName];
+
+            if (answer === undefined) {
+                const loose = extractLooseDigit(req.body);
+                if (loose !== undefined && Number(loose) >= 1 && Number(loose) <= state.currentQuestion.options.length) {
+                    answer = loose;
+                }
+            }
 
             if (answer !== undefined) {
                 justAnswered = true;

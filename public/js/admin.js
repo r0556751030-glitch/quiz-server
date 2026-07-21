@@ -186,6 +186,16 @@ socket.on('gameEnded', ({ results }) => {
   showFinalResults(results);
 });
 
+function ensureBackToGamesButton() {
+    if (document.getElementById('backToGamesBtn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'backToGamesBtn';
+    btn.className = 'btn-mini';
+    btn.textContent = '🏠 חזרה לרשימת המשחקים';
+    btn.addEventListener('click', () => { location.href = '/games.html'; });
+    document.getElementById('closeFinalOverlay').insertAdjacentElement('afterend', btn);
+}
+
 function showFinalResults(results) {
   const medals = ['🥇', '🥈', '🥉'];
   const top3 = results.slice(0, 3);
@@ -213,7 +223,9 @@ function showFinalResults(results) {
 
   document.getElementById('finalFullTable').hidden = true;
   document.getElementById('toggleFullResults').textContent = '📋 הצג טבלה מלאה';
-  document.getElementById('finalOverlay').hidden = false;
+    document.getElementById('finalOverlay').hidden = false;
+    document.getElementById('finalOverlay').hidden = false;
+    ensureBackToGamesButton();
 }
 
 document.getElementById('toggleFullResults').addEventListener('click', () => {
