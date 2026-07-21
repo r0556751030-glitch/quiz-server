@@ -95,6 +95,19 @@
     font-size: 15px;
     direction: rtl;
   }
+  .background-video{
+
+    position:fixed;
+
+    top:0;
+    left:0;
+
+height: 100vh;
+width: 100vw;
+    object-fit:fill;
+
+    z-index:-1;
+}
   .auth-form input:focus { outline: none; border-color: var(--gold); }
   .auth-submit {
     background: linear-gradient(135deg, var(--gold), #d97706);
