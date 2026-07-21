@@ -55,8 +55,20 @@ function updateConnectedCount() {
   document.getElementById('connectedCount').textContent = activeCallIds.size;
 }
 
-socket.on('connect', () => document.getElementById('connDot').className = 'conn-dot on');
+socket.on('connect', () => {
+    document.getElementById('connDot').className = 'conn-dot on';
+    resyncConnectedCount();
+});
 socket.on('disconnect', () => document.getElementById('connDot').className = 'conn-dot off');
+
+async function resyncConnectedCount() {
+    const res = await authFetch('/admin/connected');
+    if (!res.ok) return;
+    const list = await res.json();
+    activeCallIds.clear();
+    list.forEach((p) => activeCallIds.add(p.callId));
+    updateConnectedCount();
+}
 
 // ===================================================================
 // החלפת משחק פעיל (ע"י סיסמת-על) - כל דשבורד פתוח מתעדכן
