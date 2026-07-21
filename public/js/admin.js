@@ -606,7 +606,7 @@ async function loadStatus() {
 
   if (s.activeGame) document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
 
-  if ((s.status === 'open' || s.status === 'reading') && s.currentQuestion) {
+  if ((s.status === 'open' || s.status === 'paused') && s.currentQuestion) {
     document.getElementById('idleState').hidden = true;
     document.getElementById('questionResults').hidden = true;
     document.getElementById('questionLive').hidden = false;
@@ -617,12 +617,22 @@ async function loadStatus() {
     document.getElementById('liveQText').textContent = s.currentQuestion.text;
     renderLiveOptions(s.currentQuestion.options);
 
-    if (s.status === 'open' && s.openedAt) {
-      startTimer(s.currentQuestion.answerWindowSeconds, s.openedAt);
-    } else {
+    if (s.status === 'paused') {
+      // קפוא לגמרי - בלי טיימר רץ, עד שהמנהל ילחץ "המשך"
       showReadyState();
+      setControlState('paused');
+    } else if (s.openedAt) {
+      // visualStartAt חייב להיבנות באותו נוסחה כמו armQuestionTimers בשרת
+      const visualStartAt = s.openedAt + (s.readingSeconds || 0) * 1000;
+      const untilVisual = visualStartAt - Date.now();
+      if (untilVisual > 0) {
+        showReadyState();
+        setTimeout(() => startTimer(s.currentQuestion.answerWindowSeconds, visualStartAt), untilVisual);
+      } else {
+        startTimer(s.currentQuestion.answerWindowSeconds, visualStartAt);
+      }
+      setControlState('open');
     }
-    setControlState('open');
   }
 
   if (s.autoAdvance) setControlState('resumed');

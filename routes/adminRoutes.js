@@ -4,12 +4,12 @@ const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const { state, CONFIG, resolveAll } = require('../game/gameState');
+const { state, CONFIG } = require('../game/gameState');
 const { requireAuth, requireLiveGameOwnership } = require('../middleware/auth');
 
 let closeTimer = null;
 let advanceTimer = null;
-let readingTimer = null;
+let visualTimer = null;
 
 // requireAuth על הכול — כולל routes קריאת מידע
 router.use(requireAuth);
@@ -20,17 +20,65 @@ router.use(requireAuth);
 // העברת requireLiveGameOwnership גלובלית גרמה לכל הדשבורד לקרוס
 // ברגע שאין משחק פעיל (Socket.io reconnect loop).
 
-// שלב 1: "קריאת השאלה" - השאלה מוצגת על המסך, אבל הטיימר עוד לא רץ
-// ותשובות עדיין לא נקלטות (הטלפונים ממשיכים לקבל poll קצר, לא read=).
-// זה הופך את השהות שהייתה קיימת ממילא (בגלל אופי השיחה) לחלון קריאה מכוון,
-// במקום שתיתפס כ"עיכוב" מסתורי בקליטת לחיצות.
+function getTotalWindowMs(question) {
+    // כל משך הזמן האמיתי שבו ימות אמור להיות ב-read= עבור השאלה הזו:
+    // חלון "ראש-התחלה" (מכסה את הפיגור הטבעי של ימות בין קבלת הפקודה
+    // לתחילת ההאזנה בפועל) + חלון המענה הגלוי שהמנהל הגדיר.
+    return (CONFIG.READING_SECONDS + question.answerWindowSeconds) * 1000;
+}
+
+// קובע/מאפס את שני הטיימרים של שאלה פתוחה, לפי state.openedAt הנוכחי:
+// 1. visualTimer - מתי לשדר ללקוחות שהטיימר הגלוי מתחיל לרוץ (questionTimerStarted)
+// 2. closeTimer - מתי לסגור את השאלה בפועל ולחשב תוצאות
+// נקרא גם בפתיחה רגילה וגם ב-resume אחרי השהיה, כדי להמשיך בדיוק מאותה נקודה.
+function armQuestionTimers(app, question) {
+    const totalWindowMs = getTotalWindowMs(question);
+    const visualStartAt = state.openedAt + CONFIG.READING_SECONDS * 1000;
+    const closeAt = state.openedAt + totalWindowMs + 3000; // 3 שניות חסד לסגירה
+
+    if (visualTimer) clearTimeout(visualTimer);
+    const visualDelay = Math.max(0, visualStartAt - Date.now());
+    visualTimer = setTimeout(() => {
+        if (!state.currentQuestion || String(state.currentQuestion._id) !== String(question._id)) return;
+        if (state.status !== 'open') return; // הושהה בינתיים - אל תפעיל טיימר גלוי
+        app.get('io').emit('questionTimerStarted', {
+            questionId: question._id,
+            openedAt: visualStartAt,
+            answerWindowSeconds: question.answerWindowSeconds
+        });
+    }, visualDelay);
+
+    if (closeTimer) clearTimeout(closeTimer);
+    const closeDelay = Math.max(0, closeAt - Date.now());
+    const capturedOpenedAt = state.openedAt;
+    closeTimer = setTimeout(async () => {
+        if (
+            state.currentQuestion &&
+            String(state.currentQuestion._id) === String(question._id) &&
+            state.status === 'open'
+        ) {
+            state.status = 'idle';
+            app.get('io').emit('questionClosed', { questionId: question._id });
+            await computeAndEmitResults(app, question, capturedOpenedAt);
+            if (state.autoAdvance) {
+                advanceTimer = setTimeout(() => advanceToNext(app, question), 6000);
+            }
+        }
+    }, closeDelay);
+}
+
+// פתיחת שאלה: תשובות נקלטות מיידית (state.status='open' מהשנייה הראשונה) -
+// זה נותן לימות "ראש-התחלה" להתגבר על הפיגור הטבעי שלו לפני שהוא מתחיל
+// להאזין ללחיצות בפועל. הצופים רואים את השאלה, אבל הטיימר הגלוי מתעכב
+// ב-READING_SECONDS - כך שעד שהם רואים אותו זז, ימות כבר קולט לחיצות בזמן אמת.
 async function openQuestion(app, question) {
-    if (readingTimer) clearTimeout(readingTimer);
+    if (visualTimer) clearTimeout(visualTimer);
     if (closeTimer) clearTimeout(closeTimer);
 
-    state.status = 'reading';
+    state.status = 'open';
     state.currentQuestion = question;
-    state.openedAt = null;
+    state.openedAt = Date.now();
+    state.pausedRemainingMs = null;
     state.playersAtOpen = await Player.countDocuments({ active: true, game: question.game });
 
     app.get('io').emit('questionOpened', {
@@ -40,28 +88,7 @@ async function openQuestion(app, question) {
         answerWindowSeconds: question.answerWindowSeconds
     });
 
-    readingTimer = setTimeout(() => startAnswering(app, question), CONFIG.READING_SECONDS * 1000);
-}
-
-// שלב 2: הטיימר מתחיל לרוץ, ורק מהרגע הזה תשובות נקלטות בפועל
-// (state.status === 'open' - זה מה ש-yemotRoutes.js בודק לפני קליטת תשובה).
-function startAnswering(app, question) {
-    // הגנה מפני מרוץ: יתכן שהמנהל דילג לשאלה אחרת או סגר את המשחק בינתיים
-    if (!state.currentQuestion || String(state.currentQuestion._id) !== String(question._id)) return;
-    if (state.status !== 'reading') return;
-
-    state.status = 'open';
-    state.openedAt = Date.now();
-
-    resolveAll(); // no-op, נשאר לתאימות לאחור
-
-    app.get('io').emit('questionTimerStarted', {
-        questionId: question._id,
-        openedAt: state.openedAt,
-        answerWindowSeconds: question.answerWindowSeconds
-    });
-
-    scheduleAutoClose(app, question);
+    armQuestionTimers(app, question);
 }
 
 async function computeAndEmitResults(app, question, openedAt) {
@@ -89,28 +116,6 @@ async function computeAndEmitResults(app, question, openedAt) {
         counts, percentages, totalAnswered, noAnswerCount,
         correctIndex: question.isSurvey ? null : question.correctIndex
     });
-}
-
-function scheduleAutoClose(app, question) {
-    if (closeTimer) clearTimeout(closeTimer);
-    const capturedOpenedAt = state.openedAt;
-    const ms = (question.answerWindowSeconds + 3) * 1000;
-
-    closeTimer = setTimeout(async () => {
-        if (
-            state.currentQuestion &&
-            String(state.currentQuestion._id) === String(question._id) &&
-            state.status === 'open'
-        ) {
-            state.status = 'idle';
-            app.get('io').emit('questionClosed', { questionId: question._id });
-            await computeAndEmitResults(app, question, capturedOpenedAt);
-
-            if (state.autoAdvance) {
-                advanceTimer = setTimeout(() => advanceToNext(app, question), 6000);
-            }
-        }
-    }, ms);
 }
 
 async function advanceToNext(app, prevQuestion) {
@@ -214,45 +219,71 @@ router.post('/start-game', requireLiveGameOwnership, async (req, res) => {
     res.json({ success: true });
 });
 
+// השהיה אמיתית: אם יש שאלה פתוחה כרגע, מקפיאים אותה בפועל - מפסיקים לקלוט
+// תשובות (status הופך ל-'paused', לא 'open', ו-yemotRoutes.js בודק בדיוק
+// את זה) ומבטלים את שני הטיימרים כדי שלא ייסגר/יתחיל טיימר גלוי באמצע ההשהיה.
 router.post('/pause', requireLiveGameOwnership, (req, res) => {
     state.autoAdvance = false;
     if (advanceTimer) clearTimeout(advanceTimer);
+
+    if (state.status === 'open' && state.currentQuestion) {
+        if (closeTimer) clearTimeout(closeTimer);
+        if (visualTimer) clearTimeout(visualTimer);
+
+        const totalWindowMs = getTotalWindowMs(state.currentQuestion);
+        const elapsedMs = Date.now() - state.openedAt;
+        state.pausedRemainingMs = Math.max(0, totalWindowMs - elapsedMs);
+        state.status = 'paused';
+    }
+
     req.app.get('io').emit('gamePaused', {});
     res.json({ success: true });
 });
 
+// המשך: אם הייתה שאלה מושהית, ממשיכים אותה בדיוק מהנקודה שבה הושהתה
+// (מזיזים את openedAt אחורה כך שהזמן שנותר יישאר זהה), במקום לפתוח שאלה חדשה.
 router.post('/resume', requireLiveGameOwnership, async (req, res) => {
     state.autoAdvance = true;
-    if (state.status !== 'open' && state.status !== 'reading') {
+
+    if (state.status === 'paused' && state.currentQuestion && state.pausedRemainingMs != null) {
+        const question = state.currentQuestion;
+        const totalWindowMs = getTotalWindowMs(question);
+        state.openedAt = Date.now() - (totalWindowMs - state.pausedRemainingMs);
+        state.pausedRemainingMs = null;
+        state.status = 'open';
+        armQuestionTimers(req.app, question);
+    } else if (state.status !== 'open' && state.status !== 'paused') {
         const next = state.currentQuestion
             ? await Question.findOne({ game: req.gameId, order: { $gt: state.currentQuestion.order } }).sort({ order: 1 })
             : await Question.findOne({ game: req.gameId }).sort({ order: 1 });
         if (next) await openQuestion(req.app, next);
     }
+
     req.app.get('io').emit('gameResumed', {});
     res.json({ success: true });
 });
 
 router.post('/close-question', requireLiveGameOwnership, async (req, res) => {
-    if (readingTimer) clearTimeout(readingTimer);
+    if (visualTimer) clearTimeout(visualTimer);
     if (closeTimer) clearTimeout(closeTimer);
     if (advanceTimer) clearTimeout(advanceTimer);
     const question = state.currentQuestion;
     const openedAt = state.openedAt;
-    const wasOpen = state.status === 'open';
+    const wasAnswerable = state.status === 'open' || state.status === 'paused';
     state.status = 'idle';
+    state.pausedRemainingMs = null;
     req.app.get('io').emit('questionClosed', { questionId: question?._id });
-    if (question && wasOpen) await computeAndEmitResults(req.app, question, openedAt);
+    if (question && wasAnswerable) await computeAndEmitResults(req.app, question, openedAt);
     res.json({ success: true });
 });
 
 router.post('/end-game', requireLiveGameOwnership, async (req, res) => {
-    if (readingTimer) clearTimeout(readingTimer);
+    if (visualTimer) clearTimeout(visualTimer);
     if (closeTimer) clearTimeout(closeTimer);
     if (advanceTimer) clearTimeout(advanceTimer);
     const question = state.currentQuestion;
     const openedAt = state.openedAt;
-    if (question && state.status === 'open') {
+    if (question && (state.status === 'open' || state.status === 'paused')) {
         state.status = 'idle';
         req.app.get('io').emit('questionClosed', { questionId: question._id });
         await computeAndEmitResults(req.app, question, openedAt);
@@ -260,6 +291,7 @@ router.post('/end-game', requireLiveGameOwnership, async (req, res) => {
     state.autoAdvance = false;
     state.status = 'idle';
     state.currentQuestion = null;
+    state.pausedRemainingMs = null;
     await finishGame(req.app, req.gameId);
     res.json({ success: true });
 });
@@ -273,6 +305,7 @@ router.get('/status', (req, res) => {
         currentQuestion: state.currentQuestion,
         autoAdvance: state.autoAdvance,
         openedAt: state.openedAt,
+        readingSeconds: CONFIG.READING_SECONDS,
         playersAtOpen: state.playersAtOpen,
         activeGame: state.activeGame
     });

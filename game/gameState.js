@@ -12,9 +12,10 @@ const CONFIG = {
     SWEEP_INTERVAL_MS: 4000
 };
 const state = {
-    status: 'idle',
+    status: 'idle',          // 'idle' | 'open' | 'paused'
     currentQuestion: null,
-    openedAt: null,
+    openedAt: null,           // T0 האמיתי - מהרגע הזה יֶמות כבר יכול לקלוט תשובות (ראש-התחלה)
+    pausedRemainingMs: null,  // כשמושהה: כמה מ"ס נותרו מתוך כל החלון (קריאה+מענה) ברגע ההשהיה
     autoAdvance: false,
     playersAtOpen: 0,
     activeGame: null,
@@ -61,6 +62,7 @@ function setActiveGame(game) {
     state.status = 'idle';
     state.currentQuestion = null;
     state.openedAt = null;
+    state.pausedRemainingMs = null;
     state.autoAdvance = false;
     state.playersAtOpen = 0;
 }

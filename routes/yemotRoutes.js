@@ -84,7 +84,11 @@ router.post('/api', async (req, res) => {
                     ? false
                     : answer === String(state.currentQuestion.correctIndex + 1);
 
-                const responseTimeMs = Date.now() - state.openedAt;
+                // זמן תגובה נמדד מרגע תחילת הטיימר הגלוי (לא מ-state.openedAt האמיתי,
+                // שמקדים אותו ב-READING_SECONDS) - כדי שהניקוד/דירוג המהירות ישקפו
+                // בדיוק את מה שהשחקן עצמו חווה וראה על המסך.
+                const visualStartAt = state.openedAt + CONFIG.READING_SECONDS * 1000;
+                const responseTimeMs = Math.max(0, Date.now() - visualStartAt);
 
                 try {
                     await Answer.create({
@@ -118,7 +122,9 @@ router.post('/api', async (req, res) => {
         // ===== מה להחזיר לימות =====
         if (state.status === 'open' && state.currentQuestion && !justAnswered) {
             const elapsedSec = (Date.now() - state.openedAt) / 1000;
-            const remaining = state.currentQuestion.answerWindowSeconds - elapsedSec;
+            // חלון אמיתי = ראש-התחלה (מכסה את הפיגור הטבעי של ימות) + חלון המענה הגלוי
+            const totalWindowSec = CONFIG.READING_SECONDS + state.currentQuestion.answerWindowSeconds;
+            const remaining = totalWindowSec - elapsedSec;
             if (remaining > 1) {
                 return res.type('text/plain').send(buildReadCommand(state.currentQuestion, remaining));
             }
