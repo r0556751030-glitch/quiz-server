@@ -2,7 +2,7 @@ const socket = io();
 const activeCallIds = new Set();
 let questionsCache = [];
 let countdownInterval = null;
-let currentRole = null; // 'super' | 'game'
+let currentRole = null;
 let appInitialized = false;
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
@@ -28,12 +28,9 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   location.href = '/';
 });
 
-// עוטף fetch לפעולות ניהול - אם השרת מחזיר 401 (session פג/לא קיים), חוזרים לעמוד הבית
 async function authFetch(url, options) {
   const res = await fetch(url, { cache: 'no-store', ...options });
-  if (res.status === 401) {
-    location.href = '/';
-  }
+  if (res.status === 401) location.href = '/';
   return res;
 }
 
@@ -56,32 +53,35 @@ function updateConnectedCount() {
 }
 
 socket.on('connect', () => {
-    document.getElementById('connDot').className = 'conn-dot on';
-    resyncConnectedCount();
+  document.getElementById('connDot').className = 'conn-dot on';
+  resyncConnectedCount();
 });
 socket.on('disconnect', () => document.getElementById('connDot').className = 'conn-dot off');
 
 async function resyncConnectedCount() {
-    const res = await authFetch('/admin/connected');
-    if (!res.ok) return;
-    const list = await res.json();
-    activeCallIds.clear();
-    list.forEach((p) => activeCallIds.add(p.callId));
-    updateConnectedCount();
+  const res = await authFetch('/admin/connected');
+  if (!res.ok) return;
+  const list = await res.json();
+  activeCallIds.clear();
+  list.forEach((p) => activeCallIds.add(p.callId));
+  updateConnectedCount();
 }
 
 // ===================================================================
-// החלפת משחק פעיל (ע"י סיסמת-על) - כל דשבורד פתוח מתעדכן
+// החלפת משחק פעיל
 // ===================================================================
 socket.on('gameSwitched', (data) => {
-  alert(data.gameName ? ('המשחק הפעיל הוחלף ל: ' + data.gameName + '\nהעמוד ייטען מחדש.') : 'המשחק הופסק.\nהעמוד ייטען מחדש.');
+  alert(data.gameName
+    ? 'המשחק הפעיל הוחלף ל: ' + data.gameName + '\nהעמוד ייטען מחדש.'
+    : 'המשחק הופסק.\nהעמוד ייטען מחדש.');
   location.reload();
 });
 
 // ===================================================================
-// Fair Play: הבזק שם בלבד כשמישהו עונה, בלי לחשוף מה נבחר או אם נכון
+// Fair Play: הבזק שם בלבד כשמישהו עונה
 // ===================================================================
 socket.on('playerAnswered', (a) => showAnswerToast(a.name || a.phone || 'שחקן'));
+
 function showAnswerToast(label) {
   const stack = document.getElementById('toastStack');
   const el = document.createElement('div');
@@ -102,6 +102,10 @@ socket.on('questionOpened', (data) => {
   document.getElementById('idleState').hidden = true;
   document.getElementById('questionResults').hidden = true;
   document.getElementById('questionLive').hidden = false;
+
+  // תג סקר
+  const surveyBadge = document.getElementById('surveyBadge');
+  if (surveyBadge) surveyBadge.hidden = !data.question.isSurvey;
 
   document.getElementById('liveQText').textContent = data.question.text;
   renderLiveOptions(data.question.options);
@@ -144,28 +148,39 @@ socket.on('questionClosed', () => {
   setControlState('closed');
 });
 
+// ===================================================================
+// תוצאות שאלה (ברים + הדגשת תשובה נכונה)
+// תיקון: פונקציה אחת שמטפלת בכל הלוגיקה, כולל isSurvey
+// ===================================================================
 socket.on('questionResults', (r) => {
   const panel = document.getElementById('questionResults');
   panel.hidden = false;
 
+  // תג סקר בפאנל התוצאות
+  const surveyBadge = document.getElementById('resultsSurveyBadge');
+  if (surveyBadge) surveyBadge.hidden = !r.isSurvey;
+
   const q = questionsCache.find((qq) => qq._id === r.questionId);
   document.getElementById('resultsQText').textContent = q ? q.text : '';
 
-  const bars = document.getElementById('resultsBars');
-  bars.innerHTML = '';
+  const barsWrap = document.getElementById('resultsBars');
+  barsWrap.innerHTML = '';
   const options = q ? q.options : r.percentages.map((_, i) => `אפשרות ${i + 1}`);
 
   options.forEach((opt, i) => {
+    // הדגשת תשובה נכונה: רק בשאלות ידע (לא סקר), ורק האפשרות הנכונה
+    const isCorrect = !r.isSurvey && i === r.correctIndex;
     const row = document.createElement('div');
-    row.className = 'bar-row' + (i === r.correctIndex ? ' correct' : '');
+    row.className = 'bar-row' + (isCorrect ? ' correct' : '');
     row.innerHTML = `
-      <div class="bar-label">${opt}</div>
+      <div class="bar-label">${opt}${isCorrect ? ' ✔' : ''}</div>
       <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
-      <div class="bar-pct">${r.percentages[i]}%</div>
+      <div class="bar-pct">${r.percentages[i] ?? 0}%</div>
     `;
-    bars.appendChild(row);
+    barsWrap.appendChild(row);
+    // אנימציה מושהית כדי שה-CSS transition יתפוס
     requestAnimationFrame(() => {
-      row.querySelector('.bar-fill').style.width = r.percentages[i] + '%';
+      row.querySelector('.bar-fill').style.width = (r.percentages[i] ?? 0) + '%';
     });
   });
 });
@@ -174,7 +189,7 @@ socket.on('gamePaused', () => setControlState('paused'));
 socket.on('gameResumed', () => setControlState('resumed'));
 
 // ===================================================================
-// מסך תוצאות סופיות - בסיום משחק (רצף אוטומטי או כפתור "סיים משחק")
+// מסך תוצאות סופיות
 // ===================================================================
 socket.on('gameEnded', ({ results }) => {
   document.getElementById('questionLive').hidden = true;
@@ -182,26 +197,24 @@ socket.on('gameEnded', ({ results }) => {
   const idle = document.getElementById('idleState');
   idle.hidden = false;
   idle.textContent = '🏁 המשחק הסתיים';
-
   showFinalResults(results);
 });
 
 function ensureBackToGamesButton() {
-    if (document.getElementById('backToGamesBtn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'backToGamesBtn';
-    btn.className = 'btn-mini';
-    btn.textContent = '🏠 חזרה לרשימת המשחקים';
-    btn.addEventListener('click', () => { location.href = '/games.html'; });
-    document.getElementById('closeFinalOverlay').insertAdjacentElement('afterend', btn);
+  if (document.getElementById('backToGamesBtn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'backToGamesBtn';
+  btn.className = 'btn-mini';
+  btn.textContent = '🏠 חזרה לרשימת המשחקים';
+  btn.addEventListener('click', () => { location.href = '/games.html'; });
+  document.getElementById('closeFinalOverlay').insertAdjacentElement('afterend', btn);
 }
 
 function showFinalResults(results) {
   const medals = ['🥇', '🥈', '🥉'];
   const top3 = results.slice(0, 3);
 
-  const top3El = document.getElementById('finalTop3');
-  top3El.innerHTML = top3.length
+  document.getElementById('finalTop3').innerHTML = top3.length
     ? top3.map((p, i) => `
         <div class="top3-row rank-${i + 1}" style="animation-delay:${i * 0.25}s">
           <span class="top3-medal">${medals[i]}</span>
@@ -210,29 +223,30 @@ function showFinalResults(results) {
         </div>`).join('')
     : '<div class="muted">לא נאספו תוצאות במשחק הזה</div>';
 
-  const tbody = document.querySelector('#finalFullTable tbody');
-  tbody.innerHTML = results.map((p) => `
-    <tr>
-      <td class="rank">${p.rank}</td>
-      <td>${p.name || p.phone}</td>
-      <td>${p.score}</td>
-      <td>${p.correctAnswers}</td>
-      <td>${p.avgResponseTimeMs != null ? (p.avgResponseTimeMs / 1000).toFixed(1) + " שנ'" : '—'}</td>
-    </tr>
-  `).join('') || '<tr><td colspan="5" class="muted">אין נתונים</td></tr>';
+  document.querySelector('#finalFullTable tbody').innerHTML =
+    results.map((p) => `
+      <tr>
+        <td class="rank">${p.rank}</td>
+        <td>${p.name || p.phone}</td>
+        <td>${p.score}</td>
+        <td>${p.correctAnswers}</td>
+        <td>${p.avgResponseTimeMs != null ? (p.avgResponseTimeMs / 1000).toFixed(1) + " שנ'" : '—'}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="muted">אין נתונים</td></tr>';
 
   document.getElementById('finalFullTable').hidden = true;
   document.getElementById('toggleFullResults').textContent = '📋 הצג טבלה מלאה';
-    document.getElementById('finalOverlay').hidden = false;
-    document.getElementById('finalOverlay').hidden = false;
-    ensureBackToGamesButton();
+  document.getElementById('finalOverlay').hidden = false;
+  ensureBackToGamesButton();
 }
 
 document.getElementById('toggleFullResults').addEventListener('click', () => {
   const table = document.getElementById('finalFullTable');
   table.hidden = !table.hidden;
-  document.getElementById('toggleFullResults').textContent = table.hidden ? '📋 הצג טבלה מלאה' : '🔼 הסתר טבלה';
+  document.getElementById('toggleFullResults').textContent =
+    table.hidden ? '📋 הצג טבלה מלאה' : '🔼 הסתר טבלה';
 });
+
 document.getElementById('closeFinalOverlay').addEventListener('click', () => {
   document.getElementById('finalOverlay').hidden = true;
 });
@@ -243,7 +257,7 @@ document.getElementById('endGameBtn').addEventListener('click', async () => {
 });
 
 // ===================================================================
-// כפתורי שליטה (גלויים, קטנים)
+// כפתורי שליטה
 // ===================================================================
 function setControlState(kind) {
   const startBtn = document.getElementById('startBtn');
@@ -265,11 +279,13 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   const res = await authFetch('/admin/start-game', { method: 'POST' });
   if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
 });
+
 document.getElementById('pauseBtn').addEventListener('click', async () => {
   const btn = document.getElementById('pauseBtn');
   if (btn.textContent.includes('השהה')) await authFetch('/admin/pause', { method: 'POST' });
   else await authFetch('/admin/resume', { method: 'POST' });
 });
+
 document.getElementById('closeBtn').addEventListener('click', async () => {
   await authFetch('/admin/close-question', { method: 'POST' });
 });
@@ -286,8 +302,8 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
   const top3 = players.slice(0, 3);
   const medals = ['🥇', '🥈', '🥉'];
 
-  const panel = document.getElementById('top3Panel');
-  panel.innerHTML = '<h2 class="top3-title">המובילים כרגע</h2>' +
+  document.getElementById('top3Panel').innerHTML =
+    '<h2 class="top3-title">המובילים כרגע</h2>' +
     (top3.length
       ? top3.map((p, i) => `
           <div class="top3-row rank-${i + 1}">
@@ -299,6 +315,7 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
 
   overlay.hidden = false;
 });
+
 document.getElementById('top3Overlay').addEventListener('click', (e) => {
   if (e.target.id === 'top3Overlay') e.target.hidden = true;
 });
@@ -345,12 +362,17 @@ async function loadQuestions() {
   }
 
   questionsCache.forEach((q, idx) => {
+    const isSurvey = !!q.isSurvey;
     const row = document.createElement('div');
     row.className = 'qrow';
+    // בשאלת סקר לא מסמנים תשובה נכונה ברשימה
+    const optLine = q.options
+      .map((o, i) => (!isSurvey && i === q.correctIndex ? '✔ ' : '') + o)
+      .join(' · ');
     row.innerHTML = `
       <div class="qmain">
-        <div class="t">${q.order}. ${q.text}</div>
-        <div class="o">${q.options.map((o, i) => (i === q.correctIndex ? '✔ ' : '') + o).join(' · ')} · ${q.answerWindowSeconds} שנ'</div>
+        <div class="t">${q.order}. ${isSurvey ? '📊 ' : ''}${q.text}</div>
+        <div class="o">${optLine} · ${q.answerWindowSeconds} שנ'</div>
       </div>
       <button class="btn-mini" data-up="${q._id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
       <button class="btn-mini" data-down="${q._id}" ${idx === questionsCache.length - 1 ? 'disabled' : ''}>▼</button>
@@ -377,50 +399,72 @@ async function moveQuestion(id, direction) {
   const idx = questionsCache.findIndex((q) => q._id === id);
   const swapIdx = idx + direction;
   if (swapIdx < 0 || swapIdx >= questionsCache.length) return;
-
   const reordered = [...questionsCache];
   [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-  const orderedIds = reordered.map((q) => q._id);
-
   await authFetch('/admin/questions/reorder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ orderedIds })
+    body: JSON.stringify({ orderedIds: reordered.map((q) => q._id) })
   });
   loadQuestions();
 }
 
+// ===== טופס הוספת שאלה + תמיכה בסקר =====
 function renderOptionInputs() {
   const count = Number(document.getElementById('optCount').value);
+  const isSurvey = document.getElementById('typeSurvey').checked;
   const wrap = document.getElementById('optionsWrap');
   wrap.innerHTML = '';
   for (let i = 0; i < count; i++) {
     const row = document.createElement('div');
     row.className = 'opt-row';
+    // radio לתשובה נכונה מוצג רק בשאלת ידע
     row.innerHTML = `
-      <input type="radio" name="correctIndex" value="${i}" ${i === 0 ? 'checked' : ''}>
+      ${!isSurvey ? `<input type="radio" name="correctIndex" value="${i}" ${i === 0 ? 'checked' : ''}>` : ''}
       <input type="text" class="opt-input" placeholder="אפשרות ${i + 1}" required>
     `;
     wrap.appendChild(row);
   }
 }
+
 document.getElementById('optCount').addEventListener('change', renderOptionInputs);
+
+// מעבר בין סוג שאלה: הסתרת/הצגת בחירת תשובה נכונה
+document.querySelectorAll('input[name="qType"]').forEach((radio) => {
+  radio.addEventListener('change', () => {
+    const isSurvey = document.getElementById('typeSurvey').checked;
+    document.getElementById('correctAnswerSection').hidden = isSurvey;
+    renderOptionInputs(); // מרנדר מחדש כדי להוסיף/להסיר את ה-radios
+  });
+});
+
 renderOptionInputs();
 
 document.getElementById('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const isSurvey = document.getElementById('typeSurvey').checked;
   const options = Array.from(document.querySelectorAll('.opt-input')).map((i) => i.value.trim());
-  const correctIndex = Number(document.querySelector('input[name=correctIndex]:checked').value);
   const text = document.getElementById('qText').value.trim();
   const answerWindowSeconds = Number(document.getElementById('qSeconds').value);
+
+  // correctIndex: רלוונטי רק לשאלת ידע
+  let correctIndex = null;
+  if (!isSurvey) {
+    const checked = document.querySelector('input[name=correctIndex]:checked');
+    if (!checked) { alert('יש לסמן תשובה נכונה'); return; }
+    correctIndex = Number(checked.value);
+  }
 
   const res = await authFetch('/admin/questions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, options, correctIndex, answerWindowSeconds })
+    body: JSON.stringify({ text, options, correctIndex, answerWindowSeconds, isSurvey })
   });
+
   if (res.ok) {
     e.target.reset();
+    document.getElementById('correctAnswerSection').hidden = false;
+    document.getElementById('typeKnowledge').checked = true;
     renderOptionInputs();
     loadQuestions();
   } else {
@@ -430,7 +474,7 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
 });
 
 // ===================================================================
-// ניהול משתמשים - כינויים + מחיקת שחקן
+// ניהול משתמשים
 // ===================================================================
 async function loadUsers() {
   const res = await authFetch('/admin/contacts');
@@ -468,7 +512,7 @@ async function loadUsers() {
   tbody.querySelectorAll('[data-delplayer]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const phone = btn.dataset.delplayer;
-      if (!confirm(`למחוק לצמיתות את השחקן ${phone}? כל התשובות, הניקוד והכינוי שלו יימחקו ולא ניתן לשחזר.`)) return;
+      if (!confirm(`למחוק לצמיתות את השחקן ${phone}?`)) return;
       await authFetch('/admin/players/' + phone, { method: 'DELETE' });
       loadUsers();
     });
@@ -484,13 +528,8 @@ document.getElementById('addPlayerForm').addEventListener('submit', async (e) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone, name })
   });
-  if (res.ok) {
-    e.target.reset();
-    loadUsers();
-  } else {
-    const err = await res.json();
-    alert('שגיאה: ' + (err.error || 'לא ידועה'));
-  }
+  if (res.ok) { e.target.reset(); loadUsers(); }
+  else { const err = await res.json(); alert('שגיאה: ' + (err.error || 'לא ידועה')); }
 });
 
 // ===================================================================
@@ -505,13 +544,15 @@ async function loadScores() {
   const scores = await scoreRes.json();
   const speed = await speedRes.json();
 
-  document.querySelector('#scoresTable tbody').innerHTML = scores.map((p, i) => `
-    <tr><td class="rank">${i + 1}</td><td>${p.name || p.phone}</td><td>${p.score}</td><td>${p.active ? '🟢' : '⚪'}</td></tr>
-  `).join('') || '<tr><td colspan="4" class="muted">אין עדיין נתונים</td></tr>';
+  document.querySelector('#scoresTable tbody').innerHTML =
+    scores.map((p, i) => `
+      <tr><td class="rank">${i + 1}</td><td>${p.name || p.phone}</td><td>${p.score}</td><td>${p.active ? '🟢' : '⚪'}</td></tr>
+    `).join('') || '<tr><td colspan="4" class="muted">אין עדיין נתונים</td></tr>';
 
-  document.querySelector('#speedTable tbody').innerHTML = speed.map((p, i) => `
-    <tr><td class="rank">${i + 1}</td><td>${p.name || p.phone}</td><td>${(p.avgTimeMs / 1000).toFixed(1)} שנ'</td><td>${p.correctCount}</td></tr>
-  `).join('') || '<tr><td colspan="4" class="muted">אין עדיין נתונים</td></tr>';
+  document.querySelector('#speedTable tbody').innerHTML =
+    speed.map((p, i) => `
+      <tr><td class="rank">${i + 1}</td><td>${p.name || p.phone}</td><td>${(p.avgTimeMs / 1000).toFixed(1)} שנ'</td><td>${p.correctCount}</td></tr>
+    `).join('') || '<tr><td colspan="4" class="muted">אין עדיין נתונים</td></tr>';
 }
 
 // ===================================================================
@@ -521,13 +562,14 @@ async function loadConnections() {
   const res = await authFetch('/admin/connected');
   if (!res.ok) return;
   const list = await res.json();
-  document.querySelector('#connectionsTable tbody').innerHTML = list.map((p) => `
-    <tr><td>${p.name || '—'}</td><td>${p.phone}</td><td>${new Date(p.connectedAt).toLocaleTimeString('he-IL')}</td></tr>
-  `).join('') || '<tr><td colspan="3" class="muted">אין שחקנים מחוברים כרגע</td></tr>';
+  document.querySelector('#connectionsTable tbody').innerHTML =
+    list.map((p) => `
+      <tr><td>${p.name || '—'}</td><td>${p.phone}</td><td>${new Date(p.connectedAt).toLocaleTimeString('he-IL')}</td></tr>
+    `).join('') || '<tr><td colspan="3" class="muted">אין שחקנים מחוברים כרגע</td></tr>';
 }
 
 // ===================================================================
-// סטטוס ראשוני (בעת רענון עמוד)
+// סטטוס ראשוני
 // ===================================================================
 async function loadStatus() {
   const [statusRes, connectedRes] = await Promise.all([
@@ -548,6 +590,10 @@ async function loadStatus() {
     document.getElementById('idleState').hidden = true;
     document.getElementById('questionResults').hidden = true;
     document.getElementById('questionLive').hidden = false;
+
+    const surveyBadge = document.getElementById('surveyBadge');
+    if (surveyBadge) surveyBadge.hidden = !s.currentQuestion.isSurvey;
+
     document.getElementById('liveQText').textContent = s.currentQuestion.text;
     renderLiveOptions(s.currentQuestion.options);
     startTimer(s.currentQuestion.answerWindowSeconds, s.openedAt);

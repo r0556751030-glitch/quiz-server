@@ -2,11 +2,12 @@ const mongoose = require('mongoose');
 
 const questionSchema = new mongoose.Schema({
   game: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true, index: true },
-  text: { type: String, required: true },        // טקסט השאלה - מוצג רק במסך המנהל
-  options: { type: [String], required: true },    // רשימת האפשרויות (2-9 אפשרויות)
-  correctIndex: { type: Number, required: true }, // אינדקס 0-based של התשובה הנכונה
-  order: { type: Number, required: true },        // סדר הופעה במשחק
-  answerWindowSeconds: { type: Number, default: 15 } // זמן מענה בשניות
+  text: { type: String, required: true },
+  options: { type: [String], required: true },        // 2–9 אפשרויות
+  correctIndex: { type: Number, default: null },       // null עבור שאלות סקר
+  isSurvey: { type: Boolean, default: false },         // true = שאלת סקר: ללא ניקוד, ללא תשובה נכונה, רק אחוזים
+  order: { type: Number, required: true },
+  answerWindowSeconds: { type: Number, default: 15 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Question', questionSchema);

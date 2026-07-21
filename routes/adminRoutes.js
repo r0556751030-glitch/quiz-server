@@ -52,9 +52,14 @@ async function computeAndEmitResults(app, question) {
   const noAnswerCount = Math.max(0, (state.playersAtOpen || 0) - totalAnswered);
   const percentages = counts.map((c) => (totalAnswered ? Math.round((c / totalAnswered) * 100) : 0));
 
-  app.get('io').emit('questionResults', {
-    questionId: question._id, counts, percentages, totalAnswered, noAnswerCount, correctIndex: question.correctIndex
-  });
+    app.get('io').emit('questionResults', {
+        questionId: question._id,
+        isSurvey: !!question.isSurvey,   // ← חדש
+        counts, percentages, totalAnswered, noAnswerCount,
+        correctIndex: question.isSurvey ? null : question.correctIndex
+    });
+
+
 }
 
 function scheduleAutoClose(app, question) {
@@ -347,14 +352,19 @@ router.post('/questions', async (req, res) => {
     }
 
     const count = await Question.countDocuments({ game: req.gameId });
-    const question = await Question.create({
-      game: req.gameId,
-      text,
-      options,
-      correctIndex: Number(correctIndex),
-      order: count + 1,
-      answerWindowSeconds: Number(answerWindowSeconds) || 15
-    });
+      const question = await Question.create({
+          game: req.gameId,
+          text,
+          options,
+          correctIndex: isSurvey ? null : Number(correctIndex),
+          isSurvey: !!isSurvey,
+          order: count + 1,
+          answerWindowSeconds: Number(answerWindowSeconds) || 15
+      });
+      const isSurvey = !!req.body.isSurvey;
+      if (!isSurvey && (correctIndex === undefined || correctIndex < 0 || correctIndex >= options.length)) {
+          return res.status(400).json({ error: 'יש לבחור תשובה נכונה תקינה' });
+      }
 
     res.json({ success: true, question });
   } catch (err) {

@@ -1,230 +1,188 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
-
 <head>
-
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <title>חידון קליקרים - חידונים חיים בטלפון</title>
-
-  <link rel="stylesheet" href="./css/index.css">
-
+<meta charset="UTF-8">
+<title>חידון קליקרים - מסך חי</title>
+<link rel="stylesheet" href="/css/dashboard.css">
 </head>
-
-
 <body>
 
+<div class="stage-root">
 
-  <video class="background-video" autoplay muted loop playsinline>
+  <button class="admin-toggle" id="adminToggle" title="ניהול">⚙</button>
 
-    <source src="videos/start.mp4" type="video/mp4">
-
-  </video>
-
-  <div class="video-overlay"></div>
-
-  <div class="glow glow-1"></div>
-  <div class="glow glow-2"></div>
-
-
-
-  <div class="nav">
-
-    <div class="brand">
-      <div class="brand-mark">🎉</div>
-      <span>קעמפ-קליק</span>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-header">
+      <span>🎛️ ניהול <span id="activeGameName" class="muted"></span></span>
+      <button class="drawer-close" id="drawerClose">✕</button>
     </div>
 
-    <div class="nav-actions">
+    <nav class="drawer-nav">
+      <button class="nav-btn active" data-panel="questions">📋 ניהול שאלות</button>
+      <button class="nav-btn" data-panel="users">👤 ניהול משתמשים</button>
+      <button class="nav-btn" data-panel="scores">🏆 ניקוד חי</button>
+      <button class="nav-btn" data-panel="connections">📡 מחוברים כרגע</button>
+    </nav>
 
-      <button class="nav-btn" onclick="showTab('login')">
-        כניסה
-      </button>
+    <div class="drawer-body">
 
+      <!-- ניהול שאלות -->
+      <section class="panel" id="panel-questions">
+        <div id="qlist"></div>
 
-      <button class="nav-btn primary" onclick="showTab('register')">
-        הרשמה
-      </button>
+        <form class="addq" id="addForm">
+          <label>טקסט השאלה</label>
+          <input type="text" id="qText" required placeholder="לדוגמה: מה בירת ישראל?">
 
+          <!-- סוג שאלה -->
+          <label>סוג שאלה</label>
+          <div class="question-type-toggle">
+            <label class="type-opt">
+              <input type="radio" name="qType" id="typeKnowledge" value="knowledge" checked>
+              <span>❓ ידע (עם תשובה נכונה)</span>
+            </label>
+            <label class="type-opt">
+              <input type="radio" name="qType" id="typeSurvey" value="survey">
+              <span>📊 סקר (ללא תשובה נכונה)</span>
+            </label>
+          </div>
+
+          <label>כמות אפשרויות</label>
+          <select id="optCount">
+            <option value="2">2</option><option value="3">3</option>
+            <option value="4" selected>4</option><option value="5">5</option><option value="6">6</option>
+          </select>
+
+          <div id="optionsWrap"></div>
+
+          <!-- בחירת תשובה נכונה - מוסתר בשאלת סקר -->
+          <div id="correctAnswerSection">
+            <label>תשובה נכונה</label>
+            <div id="correctWrap" class="correct-radios"></div>
+          </div>
+
+          <label>זמן מענה (שניות)</label>
+          <input type="number" id="qSeconds" value="15" min="3" max="120">
+
+          <button type="submit" class="btn-mini btn-block">➕ הוספת שאלה</button>
+        </form>
+      </section>
+
+      <!-- ניהול משתמשים -->
+      <section class="panel" id="panel-users" hidden>
+        <form class="addq" id="addPlayerForm">
+          <label>הוספת שחקן ידנית (טרם התקשר)</label>
+          <input type="tel" id="newPlayerPhone" required placeholder="מספר טלפון">
+          <input type="text" id="newPlayerName" required placeholder="כינוי">
+          <button type="submit" class="btn-mini btn-block">➕ הוספת שחקן</button>
+        </form>
+
+        <table class="data-table" id="usersTable">
+          <thead><tr><th>טלפון</th><th>כינוי</th><th></th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- ניקוד חי -->
+      <section class="panel" id="panel-scores" hidden>
+        <h3>לפי ניקוד</h3>
+        <table class="data-table" id="scoresTable">
+          <thead><tr><th>#</th><th>שם</th><th>ניקוד</th><th>סטטוס</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <h3>לפי מהירות (זמן ממוצע לתשובה נכונה)</h3>
+        <table class="data-table" id="speedTable">
+          <thead><tr><th>#</th><th>שם</th><th>זמן ממוצע</th><th>תשובות נכונות</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- מחוברים כרגע -->
+      <section class="panel" id="panel-connections" hidden>
+        <table class="data-table" id="connectionsTable">
+          <thead><tr><th>שם</th><th>טלפון</th><th>מחובר מאז</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
 
     </div>
 
-  </div>
+    <div class="drawer-footer">
+      <button class="btn-mini btn-block" id="myGamesBtn" onclick="location.href='/games.html'">🗂️ המשחקים שלי</button>
+      <button class="btn-mini btn-block" id="logoutBtn">🚪 התנתקות</button>
+    </div>
+  </aside>
+  <div class="drawer-overlay" id="drawerOverlay" hidden></div>
 
+  <!-- ===== מסך ראשי מוקרן ===== -->
+  <main class="live-screen">
 
+    <div class="live-header">
+      <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
+      <span class="conn-dot off" id="connDot"></span>
+    </div>
 
+    <div class="question-stage" id="questionStage">
 
+      <div class="idle-state" id="idleState">ממתינים לשאלה הבאה...</div>
 
-  <div class="hero">
-
-
-    <div class="hero-copy">
-
-      <div class="hero-badges">
-        <span class="hero-badge">🎊 כיף למשפחה</span>
-        <span class="hero-badge">📱 משחקים מהטלפון</span>
-        <span class="hero-badge">⚡ ניקוד בזמן אמת</span>
+      <div class="question-live" id="questionLive" hidden>
+        <div class="timer-wrap">
+          <svg class="timer-ring" viewBox="0 0 120 120">
+            <circle class="timer-ring-bg" cx="60" cy="60" r="54"></circle>
+            <circle class="timer-ring-fg" id="timerRing" cx="60" cy="60" r="54"></circle>
+          </svg>
+          <div class="timer-num" id="timerNum">10</div>
+        </div>
+        <!-- תג "סקר" - מוצג רק כשהשאלה הפעילה היא מסוג סקר -->
+        <div class="survey-badge" id="surveyBadge" hidden>📊 שאלת סקר</div>
+        <h2 class="q-text" id="liveQText"></h2>
+        <div class="q-options" id="liveQOptions"></div>
       </div>
 
-      <h1>
-        ברוכים הבאים ל<span>קעמפ-קליק</span>
-      </h1>
-
-
-      <p>
-        בנו משחק, הזמינו את הקהל להתקשר,
-        והריצו חידון קליקרים חי -
-        עם שאלות, טיימר, וניקוד בזמן אמת
-        על מסך אחד משותף
-      </p>
-
+      <div class="question-results" id="questionResults" hidden>
+        <div class="survey-badge" id="resultsSurveyBadge" hidden>📊 שאלת סקר</div>
+        <h2 class="q-text" id="resultsQText"></h2>
+        <div class="results-bars" id="resultsBars"></div>
+      </div>
 
     </div>
 
-
-
-
-
-
-    <div class="auth-card">
-
-
-
-      <div class="auth-tabs">
-
-
-        <div class="auth-tab active" id="tabLogin" onclick="showTab('login')">
-
-          כניסה
-
-        </div>
-
-
-
-        <div class="auth-tab" id="tabRegister" onclick="showTab('register')">
-
-          הרשמה
-
-        </div>
-
-
-      </div>
-
-
-
-
-
-
-
-      <form class="auth-form active" id="loginForm">
-
-
-        <input type="text" id="loginUsername" placeholder="שם משתמש" required autocomplete="username">
-
-
-
-        <input type="password" id="loginPassword" placeholder="סיסמה" required autocomplete="current-password">
-
-
-
-        <button type="submit" class="auth-submit">
-
-          כניסה לחשבון
-
-        </button>
-
-
-
-        <div class="auth-error" id="loginError">
-
-        </div>
-
-
-
-        <div class="auth-hint">
-
-          אין לך חשבון?
-
-          <a onclick="showTab('register')">
-            הרשמה
-          </a>
-
-        </div>
-
-
-
-      </form>
-
-
-
-
-
-
-
-
-      <form class="auth-form" id="registerForm">
-
-
-        <input type="text" id="regUsername" placeholder="בחר שם משתמש" required minlength="3" autocomplete="username">
-
-
-
-        <input type="password" id="regPassword" placeholder="בחר סיסמה (לפחות 6 תווים)" required minlength="6"
-          autocomplete="new-password">
-
-
-
-        <button type="submit" class="auth-submit">
-
-          יצירת חשבון
-
-        </button>
-
-
-
-        <div class="auth-error" id="registerError">
-
-        </div>
-
-
-
-        <div class="auth-hint">
-
-          כבר יש לך חשבון?
-
-          <a onclick="showTab('login')">
-            כניסה
-          </a>
-
-        </div>
-
-
-      </form>
-
-
-
-
-      <div class="admin-link" onclick="location.href='/admin-login.html'">
-
-        כניסת מנהל מערכת
-
-      </div>
-
-
-
+    <div class="toast-stack" id="toastStack"></div>
+
+    <button class="btn-top3" id="top3Btn">🏆 הצג 3 מובילים</button>
+    <div class="top3-overlay" id="top3Overlay" hidden>
+      <div class="top3-panel" id="top3Panel"></div>
     </div>
 
+    <div class="final-overlay" id="finalOverlay" hidden>
+      <div class="final-panel">
+        <div class="final-badge">🏁 המשחק הסתיים</div>
+        <h2 class="top3-title">התוצאות הסופיות</h2>
+        <div id="finalTop3"></div>
 
-  </div>
+        <button class="btn-mini" id="toggleFullResults">📋 הצג טבלה מלאה</button>
+        <table class="data-table final-full-table" id="finalFullTable" hidden>
+          <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>
+          <tbody></tbody>
+        </table>
 
+        <button class="btn-mini btn-block" id="closeFinalOverlay">✕ סגירה</button>
+      </div>
+    </div>
 
+    <div class="control-bar">
+      <button class="btn-mini" id="startBtn">▶ התחל</button>
+      <button class="btn-mini" id="pauseBtn" hidden>⏸ השהה</button>
+      <button class="btn-mini" id="closeBtn" hidden>⏹ סגור</button>
+      <button class="btn-mini" id="endGameBtn"> סיים משחק</button>
+    </div>
 
+  </main>
+</div>
 
-
-  <script src="./js/index.js"></script>
-
-
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/admin.js"></script>
 </body>
-
 </html>

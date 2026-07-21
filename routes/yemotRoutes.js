@@ -11,8 +11,7 @@ function buildReadCommand(question, remainingSeconds) {
     return `read=f-001=${answerFieldName(question)},,1,1,${wait},NO,yes,,,${allowedKeys},3,Ok,NOANSWER,,no`;
 }
 
-// אין שאלה פתוחה כרגע (או שכבר ענינו על הנוכחית) - חוזרים מיד עם wait קצר
-// כדי שימות יפנה שוב בעוד רגע (short-polling, במקום hold על ה-response).
+// short-poll: ימות יפנה שוב בעוד POLL_SECONDS שניות (ממתין לשאלה הבאה)
 function buildPollCommand() {
     return `read=f-001=poll,,1,1,${CONFIG.POLL_SECONDS},NO,yes,,,,3,Ok,NOANSWER,,no`;
 }
@@ -26,17 +25,6 @@ async function markDisconnected(io, callId) {
 async function getContactName(gameId, phone) {
     const contact = await Contact.findOne({ game: gameId, phone });
     return contact ? contact.name : null;
-}
-// המקש הראשון עלול להגיע תחת שם שדה "ישן" (poll, או שאלה קודמת) - כי הטלפון
-// עדיין היה בתוך read= קודם ברגע שהשאלה נפתחה/התחלפה. מקבלים אותו כתשובה תקפה
-// כל עוד הוא מספר אפשרות חוקי עבור השאלה הפתוחה כרגע.
-function extractLooseDigit(body) {
-    for (const key of Object.keys(body)) {
-        if ((key === 'poll' || key.startsWith('ans_')) && body[key] !== undefined && body[key] !== '') {
-            return body[key];
-        }
-    }
-    return undefined;
 }
 
 router.post('/api', async (req, res) => {
@@ -53,24 +41,22 @@ router.post('/api', async (req, res) => {
             return res.type('text/plain').send('');
         }
 
-        touch(callId); // כל בקשה חיה = פינג, מתעדכן לפני כל בדיקה אחרת
+        touch(callId); // כל בקשה חיה = פינג
 
         if (!state.activeGame) {
             return res.type('text/plain').send('id_list_message=t-אין משחק פעיל כרגע, אנא נסו שוב מאוחר יותר');
         }
         const gameId = state.activeGame._id;
 
+        // ===== מציאה/יצירה של שחקן =====
         let player = await Player.findOne({ callId });
         if (!player) {
+            // סגירת רשומות "פעילות" ישנות לאותו טלפון (טלפון לא יכול להתקשר פעמיים בו-זמנית)
             const staleActive = await Player.find({ game: gameId, phone, active: true, callId: { $ne: callId } });
             if (staleActive.length) {
-                await Player.updateMany(
-                    { _id: { $in: staleActive.map((p) => p._id) } },
-                    { active: false }
-                );
-                staleActive.forEach((p) => { forget(p.callId); io.emit('playerDisconnected', { callId: p.callId }); });
+                await Player.updateMany({ _id: { $in: staleActive.map(p => p._id) } }, { active: false });
+                staleActive.forEach(p => { forget(p.callId); io.emit('playerDisconnected', { callId: p.callId }); });
             }
-
             player = await Player.create({ game: gameId, phone, callId });
             const name = await getContactName(gameId, phone);
             io.emit('playerConnected', { callId, phone, playerId: player._id, score: player.score, name });
@@ -79,22 +65,25 @@ router.post('/api', async (req, res) => {
             await player.save();
         }
 
-
+        // ===== קליטת תשובה לשאלה פתוחה =====
+        // חשוב: בודקים רק את השדה הספציפי של השאלה הנוכחית (answerFieldName).
+        // לא משתמשים ב-extractLooseDigit — כי ימות שומר שדות ישנים ב-session ומחזיר
+        // אותם בפינגים עתידיים, מה שגרם לקליטת תשובות מהשאלה הקודמת כתשובות לשאלה הנוכחית
+        // (הבאג של "צריך ללחוץ פעמיים משאלה 2 ואילך").
         let justAnswered = false;
         if (state.status === 'open' && state.currentQuestion) {
             const fieldName = answerFieldName(state.currentQuestion);
-            let answer = req.body[fieldName];
+            const answer = req.body[fieldName];
 
-            if (answer === undefined) {
-                const loose = extractLooseDigit(req.body);
-                if (loose !== undefined && Number(loose) >= 1 && Number(loose) <= state.currentQuestion.options.length) {
-                    answer = loose;
-                }
-            }
-
-            if (answer !== undefined) {
+            if (answer !== undefined && answer !== '') {
                 justAnswered = true;
-                const isCorrect = answer === String(state.currentQuestion.correctIndex + 1);
+                const isSurvey = !!state.currentQuestion.isSurvey;
+
+                // לשאלת סקר: אין "נכון/לא נכון", תמיד isCorrect=false, אין ניקוד
+                const isCorrect = isSurvey
+                    ? false
+                    : answer === String(state.currentQuestion.correctIndex + 1);
+
                 const responseTimeMs = Date.now() - state.openedAt;
 
                 try {
@@ -106,29 +95,38 @@ router.post('/api', async (req, res) => {
                         isCorrect,
                         responseTimeMs
                     });
-                    if (isCorrect) {
+
+                    // ניקוד: רק בשאלות ידע (לא סקר)
+                    if (!isSurvey && isCorrect) {
                         player.score += 10;
                         await player.save();
                     }
+
                     const name = await getContactName(gameId, phone);
                     io.emit('playerAnswered', {
                         callId, phone, playerId: player._id,
-                        questionId: state.currentQuestion._id, choice: answer, isCorrect,
+                        questionId: state.currentQuestion._id,
+                        choice: answer, isCorrect, isSurvey,
                         responseTimeMs, name
                     });
                 } catch (dupErr) {
-                    // כבר נשלחה תשובה קודמת לאותה שאלה - מתעלמים בשקט
+                    // כבר נשלחה תשובה קודמת לאותה שאלה (unique index) — מתעלמים בשקט
                 }
             }
         }
 
+        // ===== מה להחזיר לימות =====
         if (state.status === 'open' && state.currentQuestion && !justAnswered) {
             const elapsedSec = (Date.now() - state.openedAt) / 1000;
             const remaining = state.currentQuestion.answerWindowSeconds - elapsedSec;
-            return res.type('text/plain').send(buildReadCommand(state.currentQuestion, remaining));
+            if (remaining > 1) {
+                return res.type('text/plain').send(buildReadCommand(state.currentQuestion, remaining));
+            }
         }
 
+        // אין שאלה פתוחה, השחקן כבר ענה, או שהזמן נגמר — poll קצר עד השאלה הבאה
         return res.type('text/plain').send(buildPollCommand());
+
     } catch (err) {
         console.error('שגיאה בטיפול בבקשת ימות:', err);
         res.type('text/plain').send('id_list_message=t-אירעה שגיאה, אנא נסו שוב');
