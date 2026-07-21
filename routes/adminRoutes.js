@@ -10,8 +10,14 @@ const { requireAuth, requireLiveGameOwnership } = require('../middleware/auth');
 let closeTimer = null;
 let advanceTimer = null;
 
+// requireAuth על הכול — כולל routes קריאת מידע
 router.use(requireAuth);
-router.use(requireLiveGameOwnership);
+
+// requireLiveGameOwnership רק על routes שליטה (open/start/pause/close/end).
+// routes קריאת מידע (/status, /connected, /leaderboard וכו') לא מקבלים אותו —
+// הם נקראים מיד בטעינת הדף ויש להם fallback כשאין משחק פעיל.
+// העברת requireLiveGameOwnership גלובלית גרמה לכל הדשבורד לקרוס
+// ברגע שאין משחק פעיל (Socket.io reconnect loop).
 
 async function openQuestion(app, question) {
     state.status = 'open';
@@ -32,7 +38,6 @@ async function openQuestion(app, question) {
     });
 }
 
-// מסנן תשובות לפי openedAt כדי שפתיחה חוזרת של אותה שאלה לא תצבור נתונים היסטוריים
 async function computeAndEmitResults(app, question, openedAt) {
     const sinceDate = new Date(openedAt);
     const answers = await Answer.find({
@@ -62,7 +67,7 @@ async function computeAndEmitResults(app, question, openedAt) {
 
 function scheduleAutoClose(app, question) {
     if (closeTimer) clearTimeout(closeTimer);
-    const capturedOpenedAt = state.openedAt; // לוכד לפני שה-state יכול להשתנות
+    const capturedOpenedAt = state.openedAt;
     const ms = (question.answerWindowSeconds + 3) * 1000;
 
     closeTimer = setTimeout(async () => {
@@ -164,9 +169,9 @@ async function finishGame(app, gameId) {
     app.get('io').emit('gameEnded', { results });
 }
 
-// ===== routes שליטה =====
+// ===== פעולות שליטה — דורשות משחק פעיל + בעלות =====
 
-router.post('/open-question/:id', async (req, res) => {
+router.post('/open-question/:id', requireLiveGameOwnership, async (req, res) => {
     const question = await Question.findOne({ _id: req.params.id, game: req.gameId });
     if (!question) return res.status(404).json({ error: 'שאלה לא נמצאה' });
     if (advanceTimer) clearTimeout(advanceTimer);
@@ -174,7 +179,7 @@ router.post('/open-question/:id', async (req, res) => {
     res.json({ success: true, question });
 });
 
-router.post('/start-game', async (req, res) => {
+router.post('/start-game', requireLiveGameOwnership, async (req, res) => {
     const first = await Question.findOne({ game: req.gameId }).sort({ order: 1 });
     if (!first) return res.status(400).json({ error: 'אין שאלות במאגר' });
     state.autoAdvance = true;
@@ -183,14 +188,14 @@ router.post('/start-game', async (req, res) => {
     res.json({ success: true });
 });
 
-router.post('/pause', (req, res) => {
+router.post('/pause', requireLiveGameOwnership, (req, res) => {
     state.autoAdvance = false;
     if (advanceTimer) clearTimeout(advanceTimer);
     req.app.get('io').emit('gamePaused', {});
     res.json({ success: true });
 });
 
-router.post('/resume', async (req, res) => {
+router.post('/resume', requireLiveGameOwnership, async (req, res) => {
     state.autoAdvance = true;
     if (state.status !== 'open') {
         const next = state.currentQuestion
@@ -202,7 +207,7 @@ router.post('/resume', async (req, res) => {
     res.json({ success: true });
 });
 
-router.post('/close-question', async (req, res) => {
+router.post('/close-question', requireLiveGameOwnership, async (req, res) => {
     if (closeTimer) clearTimeout(closeTimer);
     if (advanceTimer) clearTimeout(advanceTimer);
     const question = state.currentQuestion;
@@ -213,7 +218,7 @@ router.post('/close-question', async (req, res) => {
     res.json({ success: true });
 });
 
-router.post('/end-game', async (req, res) => {
+router.post('/end-game', requireLiveGameOwnership, async (req, res) => {
     if (closeTimer) clearTimeout(closeTimer);
     if (advanceTimer) clearTimeout(advanceTimer);
     const question = state.currentQuestion;
@@ -230,148 +235,27 @@ router.post('/end-game', async (req, res) => {
     res.json({ success: true });
 });
 
-router.get('/final-results', async (req, res) => {
-    const results = await buildFinalResults(req.gameId);
-    res.json(results);
+// ===== קריאת מידע — requireAuth בלבד, ללא requireLiveGameOwnership =====
+// (עובדים גם כשאין משחק פעיל, מחזירים מידע ריק או null)
+
+router.get('/status', (req, res) => {
+    res.json({
+        status: state.status,
+        currentQuestion: state.currentQuestion,
+        autoAdvance: state.autoAdvance,
+        openedAt: state.openedAt,
+        playersAtOpen: state.playersAtOpen,
+        activeGame: state.activeGame
+    });
 });
-
-// ===== leaderboard =====
-
-router.get('/leaderboard', async (req, res) => {
-    const players = await Player.aggregate([
-        { $match: { game: req.gameId } },
-        { $group: { _id: '$phone', score: { $sum: '$score' }, active: { $max: { $cond: ['$active', 1, 0] } } } },
-        {
-            $lookup: {
-                from: 'contacts',
-                let: { phone: '$_id' },
-                pipeline: [{
-                    $match: {
-                        $expr: {
-                            $and: [
-                                { $eq: ['$phone', '$$phone'] },
-                                { $eq: ['$game', req.gameId] }
-                            ]
-                        }
-                    }
-                }],
-                as: 'contact'
-            }
-        },
-        {
-            $project: {
-                phone: '$_id', score: 1,
-                active: { $eq: ['$active', 1] },
-                name: { $arrayElemAt: ['$contact.name', 0] },
-                _id: 0
-            }
-        }
-    ]);
-
-    const knownPhones = new Set(players.map((p) => p.phone));
-    const allContacts = await Contact.find({ game: req.gameId });
-    const manualOnly = allContacts
-        .filter((c) => !knownPhones.has(c.phone))
-        .map((c) => ({ phone: c.phone, score: 0, active: false, name: c.name || null }));
-
-    res.json([...players, ...manualOnly].sort((a, b) => b.score - a.score));
-});
-
-router.get('/leaderboard-speed', async (req, res) => {
-    const speed = await Answer.aggregate([
-        { $match: { game: req.gameId, isCorrect: true, responseTimeMs: { $ne: null } } },
-        { $lookup: { from: 'players', localField: 'player', foreignField: '_id', as: 'p' } },
-        { $unwind: '$p' },
-        { $group: { _id: '$p.phone', totalTimeMs: { $sum: '$responseTimeMs' }, correctCount: { $sum: 1 } } },
-        {
-            $lookup: {
-                from: 'contacts',
-                let: { phone: '$_id' },
-                pipeline: [{
-                    $match: {
-                        $expr: {
-                            $and: [
-                                { $eq: ['$phone', '$$phone'] },
-                                { $eq: ['$game', req.gameId] }
-                            ]
-                        }
-                    }
-                }],
-                as: 'contact'
-            }
-        },
-        {
-            $project: {
-                phone: '$_id', correctCount: 1,
-                avgTimeMs: { $divide: ['$totalTimeMs', '$correctCount'] },
-                name: { $arrayElemAt: ['$contact.name', 0] },
-                _id: 0
-            }
-        },
-        { $sort: { avgTimeMs: 1 } }
-    ]);
-    res.json(speed);
-});
-
-// ===== connected =====
-
-router.get('/connected', async (req, res) => {
-    const active = await Player.find({ active: true, game: req.gameId }).sort({ connectedAt: -1 });
-    const latestByPhone = new Map();
-    for (const p of active) {
-        if (!latestByPhone.has(p.phone)) latestByPhone.set(p.phone, p);
-    }
-    const deduped = Array.from(latestByPhone.values());
-    const phones = deduped.map((p) => p.phone);
-    const contacts = await Contact.find({ game: req.gameId, phone: { $in: phones } });
-    const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
-    res.json(deduped.map((p) => ({
-        phone: p.phone, name: nameMap.get(p.phone) || null,
-        connectedAt: p.connectedAt, callId: p.callId
-    })));
-});
-
-// ===== contacts =====
-
-router.get('/contacts', async (req, res) => {
-    const playerPhones = new Set(await Player.distinct('phone', { game: req.gameId }));
-    const contacts = await Contact.find({ game: req.gameId });
-    const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
-    const allPhones = new Set([...playerPhones, ...contacts.map((c) => c.phone)]);
-    res.json(Array.from(allPhones).map((phone) => ({
-        phone, name: nameMap.get(phone) || null, hasCalled: playerPhones.has(phone)
-    })));
-});
-
-router.post('/contacts', async (req, res) => {
-    const { phone, name } = req.body;
-    if (!phone) return res.status(400).json({ error: 'חסר מספר טלפון' });
-    await Contact.findOneAndUpdate({ game: req.gameId, phone }, { name: name || null }, { upsert: true });
-    req.app.get('io').emit('contactUpdated', { phone, name: name || null });
-    res.json({ success: true });
-});
-
-router.delete('/players/:phone', async (req, res) => {
-    const { phone } = req.params;
-    const players = await Player.find({ game: req.gameId, phone });
-    const playerIds = players.map((p) => p._id);
-    await Promise.all([
-        Answer.deleteMany({ game: req.gameId, player: { $in: playerIds } }),
-        Player.deleteMany({ game: req.gameId, phone }),
-        Contact.deleteOne({ game: req.gameId, phone })
-    ]);
-    req.app.get('io').emit('playerDeleted', { phone });
-    res.json({ success: true });
-});
-
-// ===== questions =====
 
 router.get('/questions', async (req, res) => {
-    const questions = await Question.find({ game: req.gameId }).sort({ order: 1 });
+    if (!state.activeGame) return res.json([]);
+    const questions = await Question.find({ game: state.activeGame._id }).sort({ order: 1 });
     res.json(questions);
 });
 
-router.post('/questions', async (req, res) => {
+router.post('/questions', requireLiveGameOwnership, async (req, res) => {
     try {
         const { text, options, answerWindowSeconds } = req.body;
         const isSurvey = !!req.body.isSurvey;
@@ -402,12 +286,12 @@ router.post('/questions', async (req, res) => {
     }
 });
 
-router.delete('/questions/:id', async (req, res) => {
+router.delete('/questions/:id', requireLiveGameOwnership, async (req, res) => {
     await Question.findOneAndDelete({ _id: req.params.id, game: req.gameId });
     res.json({ success: true });
 });
 
-router.post('/questions/reorder', async (req, res) => {
+router.post('/questions/reorder', requireLiveGameOwnership, async (req, res) => {
     const { orderedIds } = req.body;
     if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'נתונים לא תקינים' });
     await Promise.all(orderedIds.map((id, idx) =>
@@ -416,15 +300,145 @@ router.post('/questions/reorder', async (req, res) => {
     res.json({ success: true });
 });
 
-router.get('/status', (req, res) => {
-    res.json({
-        status: state.status,
-        currentQuestion: state.currentQuestion,
-        autoAdvance: state.autoAdvance,
-        openedAt: state.openedAt,
-        playersAtOpen: state.playersAtOpen,
-        activeGame: state.activeGame
-    });
+router.get('/leaderboard', async (req, res) => {
+    if (!state.activeGame) return res.json([]);
+    const gameId = state.activeGame._id;
+
+    const players = await Player.aggregate([
+        { $match: { game: gameId } },
+        { $group: { _id: '$phone', score: { $sum: '$score' }, active: { $max: { $cond: ['$active', 1, 0] } } } },
+        {
+            $lookup: {
+                from: 'contacts',
+                let: { phone: '$_id' },
+                pipeline: [{
+                    $match: {
+                        $expr: {
+                            $and: [
+                                { $eq: ['$phone', '$$phone'] },
+                                { $eq: ['$game', gameId] }
+                            ]
+                        }
+                    }
+                }],
+                as: 'contact'
+            }
+        },
+        {
+            $project: {
+                phone: '$_id', score: 1,
+                active: { $eq: ['$active', 1] },
+                name: { $arrayElemAt: ['$contact.name', 0] },
+                _id: 0
+            }
+        }
+    ]);
+
+    const knownPhones = new Set(players.map((p) => p.phone));
+    const allContacts = await Contact.find({ game: gameId });
+    const manualOnly = allContacts
+        .filter((c) => !knownPhones.has(c.phone))
+        .map((c) => ({ phone: c.phone, score: 0, active: false, name: c.name || null }));
+
+    res.json([...players, ...manualOnly].sort((a, b) => b.score - a.score));
+});
+
+router.get('/leaderboard-speed', async (req, res) => {
+    if (!state.activeGame) return res.json([]);
+    const gameId = state.activeGame._id;
+
+    const speed = await Answer.aggregate([
+        { $match: { game: gameId, isCorrect: true, responseTimeMs: { $ne: null } } },
+        { $lookup: { from: 'players', localField: 'player', foreignField: '_id', as: 'p' } },
+        { $unwind: '$p' },
+        { $group: { _id: '$p.phone', totalTimeMs: { $sum: '$responseTimeMs' }, correctCount: { $sum: 1 } } },
+        {
+            $lookup: {
+                from: 'contacts',
+                let: { phone: '$_id' },
+                pipeline: [{
+                    $match: {
+                        $expr: {
+                            $and: [
+                                { $eq: ['$phone', '$$phone'] },
+                                { $eq: ['$game', gameId] }
+                            ]
+                        }
+                    }
+                }],
+                as: 'contact'
+            }
+        },
+        {
+            $project: {
+                phone: '$_id', correctCount: 1,
+                avgTimeMs: { $divide: ['$totalTimeMs', '$correctCount'] },
+                name: { $arrayElemAt: ['$contact.name', 0] },
+                _id: 0
+            }
+        },
+        { $sort: { avgTimeMs: 1 } }
+    ]);
+    res.json(speed);
+});
+
+router.get('/connected', async (req, res) => {
+    if (!state.activeGame) return res.json([]);
+    const gameId = state.activeGame._id;
+
+    const active = await Player.find({ active: true, game: gameId }).sort({ connectedAt: -1 });
+    const latestByPhone = new Map();
+    for (const p of active) {
+        if (!latestByPhone.has(p.phone)) latestByPhone.set(p.phone, p);
+    }
+    const deduped = Array.from(latestByPhone.values());
+    const phones = deduped.map((p) => p.phone);
+    const contacts = await Contact.find({ game: gameId, phone: { $in: phones } });
+    const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
+    res.json(deduped.map((p) => ({
+        phone: p.phone, name: nameMap.get(p.phone) || null,
+        connectedAt: p.connectedAt, callId: p.callId
+    })));
+});
+
+router.get('/contacts', async (req, res) => {
+    if (!state.activeGame) return res.json([]);
+    const gameId = state.activeGame._id;
+
+    const playerPhones = new Set(await Player.distinct('phone', { game: gameId }));
+    const contacts = await Contact.find({ game: gameId });
+    const nameMap = new Map(contacts.map((c) => [c.phone, c.name]));
+    const allPhones = new Set([...playerPhones, ...contacts.map((c) => c.phone)]);
+    res.json(Array.from(allPhones).map((phone) => ({
+        phone, name: nameMap.get(phone) || null, hasCalled: playerPhones.has(phone)
+    })));
+});
+
+router.post('/contacts', requireLiveGameOwnership, async (req, res) => {
+    const { phone, name } = req.body;
+    if (!phone) return res.status(400).json({ error: 'חסר מספר טלפון' });
+    await Contact.findOneAndUpdate({ game: req.gameId, phone }, { name: name || null }, { upsert: true });
+    req.app.get('io').emit('contactUpdated', { phone, name: name || null });
+    res.json({ success: true });
+});
+
+router.delete('/players/:phone', requireLiveGameOwnership, async (req, res) => {
+    const { phone } = req.params;
+    const players = await Player.find({ game: req.gameId, phone });
+    const playerIds = players.map((p) => p._id);
+    await Promise.all([
+        Answer.deleteMany({ game: req.gameId, player: { $in: playerIds } }),
+        Player.deleteMany({ game: req.gameId, phone }),
+        Contact.deleteOne({ game: req.gameId, phone })
+    ]);
+    req.app.get('io').emit('playerDeleted', { phone });
+    res.json({ success: true });
+});
+
+router.get('/final-results', async (req, res) => {
+    if (!state.activeGame) return res.json([]);
+    const results = await buildFinalResults(state.activeGame._id);
+    res.json(results);
 });
 
 module.exports = router;
