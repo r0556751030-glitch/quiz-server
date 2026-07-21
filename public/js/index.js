@@ -232,8 +232,8 @@ document
 
 
 
-// בדיקה אם המשתמש כבר מחובר
-
+// בדיקה אם המשתמש כבר מחובר - לא מבצעים הפניה אוטומטית, רק מציגים
+// פס עדין למעלה שהמשתמש יכול ללחוץ עליו כדי להמשיך לאזור האישי
 fetch('/admin/me')
 
 .then(r=>r.json())
@@ -243,9 +243,37 @@ fetch('/admin/me')
 
     if(d.authenticated){
 
-        location.href='/games.html';
+        showAlreadyLoggedInBar(d);
 
     }
 
 
 });
+
+function showAlreadyLoggedInBar(d) {
+    const label = d.role === 'admin' ? '🔐 מנהל מערכת' : `👤 ${d.username}`;
+
+    const bar = document.createElement('div');
+    bar.id = 'alreadyInBar';
+    bar.style.cssText = `
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        background: rgba(20, 10, 14, 0.9);
+        backdrop-filter: blur(6px);
+        border-bottom: 1px solid rgba(252, 191, 92, 0.35);
+        color: #fff8f0;
+        font-size: 13.5px;
+        padding: 10px 16px;
+    `;
+    bar.innerHTML = `
+        <span>מחובר בתור ${label}</span>
+        <span id="continueLink" style="
+            color:#ffd76a; font-weight:700; cursor:pointer; text-decoration:underline;
+        ">המשך לאזור האישי ←</span>
+    `;
+    document.body.prepend(bar);
+
+    document.getElementById('continueLink').addEventListener('click', () => {
+        location.href = '/games.html';
+    });
+}

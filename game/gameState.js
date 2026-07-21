@@ -6,6 +6,7 @@
 
 const CONFIG = {
     POLL_SECONDS: 1,                     // ← היה 4, גרם לעיכוב של עד 4 שניות בקליטת תשובה
+    READING_SECONDS: 4,                  // זמן "קריאת השאלה" לפני שהטיימר מתחיל ותשובות נקלטות
     IDLE_STALE_TIMEOUT_MS: 12000,
     OPEN_QUESTION_STALE_BUFFER_MS: 8000,
     SWEEP_INTERVAL_MS: 4000

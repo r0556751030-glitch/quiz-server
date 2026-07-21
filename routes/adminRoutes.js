@@ -4,11 +4,12 @@ const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const { state, resolveAll, answerFieldName } = require('../game/gameState');
+const { state, CONFIG, resolveAll } = require('../game/gameState');
 const { requireAuth, requireLiveGameOwnership } = require('../middleware/auth');
 
 let closeTimer = null;
 let advanceTimer = null;
+let readingTimer = null;
 
 // requireAuth על הכול — כולל routes קריאת מידע
 router.use(requireAuth);
@@ -19,23 +20,48 @@ router.use(requireAuth);
 // העברת requireLiveGameOwnership גלובלית גרמה לכל הדשבורד לקרוס
 // ברגע שאין משחק פעיל (Socket.io reconnect loop).
 
+// שלב 1: "קריאת השאלה" - השאלה מוצגת על המסך, אבל הטיימר עוד לא רץ
+// ותשובות עדיין לא נקלטות (הטלפונים ממשיכים לקבל poll קצר, לא read=).
+// זה הופך את השהות שהייתה קיימת ממילא (בגלל אופי השיחה) לחלון קריאה מכוון,
+// במקום שתיתפס כ"עיכוב" מסתורי בקליטת לחיצות.
 async function openQuestion(app, question) {
-    state.status = 'open';
+    if (readingTimer) clearTimeout(readingTimer);
+    if (closeTimer) clearTimeout(closeTimer);
+
+    state.status = 'reading';
     state.currentQuestion = question;
-    state.openedAt = Date.now();
+    state.openedAt = null;
     state.playersAtOpen = await Player.countDocuments({ active: true, game: question.game });
 
-    const allowedKeys = question.options.map((_, i) => i + 1).join('');
-    const command = `read=f-001=${answerFieldName(question)},,1,1,${question.answerWindowSeconds},NO,yes,,,${allowedKeys},3,Ok,NOANSWER,,no`;
-
-    resolveAll(command);
-    scheduleAutoClose(app, question);
     app.get('io').emit('questionOpened', {
         question,
         autoAdvance: state.autoAdvance,
+        readingSeconds: CONFIG.READING_SECONDS,
+        answerWindowSeconds: question.answerWindowSeconds
+    });
+
+    readingTimer = setTimeout(() => startAnswering(app, question), CONFIG.READING_SECONDS * 1000);
+}
+
+// שלב 2: הטיימר מתחיל לרוץ, ורק מהרגע הזה תשובות נקלטות בפועל
+// (state.status === 'open' - זה מה ש-yemotRoutes.js בודק לפני קליטת תשובה).
+function startAnswering(app, question) {
+    // הגנה מפני מרוץ: יתכן שהמנהל דילג לשאלה אחרת או סגר את המשחק בינתיים
+    if (!state.currentQuestion || String(state.currentQuestion._id) !== String(question._id)) return;
+    if (state.status !== 'reading') return;
+
+    state.status = 'open';
+    state.openedAt = Date.now();
+
+    resolveAll(); // no-op, נשאר לתאימות לאחור
+
+    app.get('io').emit('questionTimerStarted', {
+        questionId: question._id,
         openedAt: state.openedAt,
         answerWindowSeconds: question.answerWindowSeconds
     });
+
+    scheduleAutoClose(app, question);
 }
 
 async function computeAndEmitResults(app, question, openedAt) {
@@ -197,7 +223,7 @@ router.post('/pause', requireLiveGameOwnership, (req, res) => {
 
 router.post('/resume', requireLiveGameOwnership, async (req, res) => {
     state.autoAdvance = true;
-    if (state.status !== 'open') {
+    if (state.status !== 'open' && state.status !== 'reading') {
         const next = state.currentQuestion
             ? await Question.findOne({ game: req.gameId, order: { $gt: state.currentQuestion.order } }).sort({ order: 1 })
             : await Question.findOne({ game: req.gameId }).sort({ order: 1 });
@@ -208,17 +234,20 @@ router.post('/resume', requireLiveGameOwnership, async (req, res) => {
 });
 
 router.post('/close-question', requireLiveGameOwnership, async (req, res) => {
+    if (readingTimer) clearTimeout(readingTimer);
     if (closeTimer) clearTimeout(closeTimer);
     if (advanceTimer) clearTimeout(advanceTimer);
     const question = state.currentQuestion;
     const openedAt = state.openedAt;
+    const wasOpen = state.status === 'open';
     state.status = 'idle';
     req.app.get('io').emit('questionClosed', { questionId: question?._id });
-    if (question) await computeAndEmitResults(req.app, question, openedAt);
+    if (question && wasOpen) await computeAndEmitResults(req.app, question, openedAt);
     res.json({ success: true });
 });
 
 router.post('/end-game', requireLiveGameOwnership, async (req, res) => {
+    if (readingTimer) clearTimeout(readingTimer);
     if (closeTimer) clearTimeout(closeTimer);
     if (advanceTimer) clearTimeout(advanceTimer);
     const question = state.currentQuestion;

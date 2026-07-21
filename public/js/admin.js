@@ -98,6 +98,8 @@ function showAnswerToast(label) {
 // ===================================================================
 // שאלה חיה
 // ===================================================================
+// שלב "קריאת השאלה": השאלה מוצגת, אבל הטיימר עוד לא רץ ותשובות עדיין
+// לא נקלטות בשרת. הטיימר יתחיל בפועל רק עם אירוע questionTimerStarted.
 socket.on('questionOpened', (data) => {
   document.getElementById('idleState').hidden = true;
   document.getElementById('questionResults').hidden = true;
@@ -109,8 +111,23 @@ socket.on('questionOpened', (data) => {
 
   document.getElementById('liveQText').textContent = data.question.text;
   renderLiveOptions(data.question.options);
-  startTimer(data.answerWindowSeconds, data.openedAt);
+  showReadyState();
   setControlState('open');
+});
+
+// הטבעת מוצגת מלאה ("..."), בלי לרדת, כל עוד אנחנו בשלב הקריאה
+function showReadyState() {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  const ring = document.getElementById('timerRing');
+  const numEl = document.getElementById('timerNum');
+  ring.style.strokeDasharray = RING_CIRCUMFERENCE;
+  ring.style.strokeDashoffset = 0;
+  numEl.textContent = '⏳';
+}
+
+// כאן בפועל מתחיל הטיימר לרדת - ומהרגע הזה השרת גם מתחיל לקלוט תשובות
+socket.on('questionTimerStarted', (data) => {
+  startTimer(data.answerWindowSeconds, data.openedAt);
 });
 
 function renderLiveOptions(options) {
@@ -184,14 +201,13 @@ socket.on('questionResults', (r) => {
     });
   });
 });
+
 socket.on('gamePaused', () => {
-    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
-    setControlState('paused');
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  setControlState('paused');
 });
-socket.on('gameResumed', () => {
-    setControlState('resumed');
-    // הטיימר יתחדש בעצמו כש-questionOpened יגיע עם השאלה הבאה
-});
+socket.on('gameResumed', () => setControlState('resumed'));
+
 // ===================================================================
 // מסך תוצאות סופיות
 // ===================================================================
@@ -590,7 +606,7 @@ async function loadStatus() {
 
   if (s.activeGame) document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
 
-  if (s.status === 'open' && s.currentQuestion) {
+  if ((s.status === 'open' || s.status === 'reading') && s.currentQuestion) {
     document.getElementById('idleState').hidden = true;
     document.getElementById('questionResults').hidden = true;
     document.getElementById('questionLive').hidden = false;
@@ -600,7 +616,12 @@ async function loadStatus() {
 
     document.getElementById('liveQText').textContent = s.currentQuestion.text;
     renderLiveOptions(s.currentQuestion.options);
-    startTimer(s.currentQuestion.answerWindowSeconds, s.openedAt);
+
+    if (s.status === 'open' && s.openedAt) {
+      startTimer(s.currentQuestion.answerWindowSeconds, s.openedAt);
+    } else {
+      showReadyState();
+    }
     setControlState('open');
   }
 
