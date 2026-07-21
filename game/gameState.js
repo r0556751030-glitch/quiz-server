@@ -5,12 +5,11 @@
  */
 
 const CONFIG = {
-    POLL_SECONDS: 4,                     // wait שנשלח לימות כשאין שאלה פתוחה (לובי)
-    IDLE_STALE_TIMEOUT_MS: 12000,        // בלובי, בלי פינג מעבר לזה = מנותק בפועל
-    OPEN_QUESTION_STALE_BUFFER_MS: 8000, // מרווח ביטחון מעבר לחלון התשובה של השאלה
+    POLL_SECONDS: 1,                     // ← היה 4, גרם לעיכוב של עד 4 שניות בקליטת תשובה
+    IDLE_STALE_TIMEOUT_MS: 12000,
+    OPEN_QUESTION_STALE_BUFFER_MS: 8000,
     SWEEP_INTERVAL_MS: 4000
 };
-
 const state = {
     status: 'idle',
     currentQuestion: null,

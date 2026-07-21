@@ -4,15 +4,20 @@
 <meta charset="UTF-8">
 <title>חידון קליקרים - מסך חי</title>
 <link rel="stylesheet" href="/css/dashboard.css">
+<style>
+  .question-type-toggle { display:flex; gap:12px; margin-bottom:8px; }
+  .type-opt { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:14px; color:var(--text,#f3eefe); }
+  .type-opt input[type=radio] { accent-color:#f59e0b; width:16px; height:16px; cursor:pointer; }
+  #correctAnswerSection { transition: opacity 0.2s; }
+  #correctAnswerSection[hidden] { display:none; }
+</style>
 </head>
 <body>
 
 <div class="stage-root">
 
-  <!-- אייקון פתיחת סרגל ניהול - עדין, לא בולט לקהל -->
   <button class="admin-toggle" id="adminToggle" title="ניהול">⚙</button>
 
-  <!-- סרגל ניהול נשלף (drawer) - סגור כברירת מחדל -->
   <aside class="drawer" id="drawer">
     <div class="drawer-header">
       <span>🎛️ ניהול <span id="activeGameName" class="muted"></span></span>
@@ -33,16 +38,37 @@
         <div id="qlist"></div>
 
         <form class="addq" id="addForm">
+
           <label>טקסט השאלה</label>
           <input type="text" id="qText" required placeholder="לדוגמה: מה בירת ישראל?">
 
+          <label>סוג שאלה</label>
+          <div class="question-type-toggle">
+            <label class="type-opt">
+              <input type="radio" name="qType" id="typeKnowledge" value="knowledge" checked>
+              <span>❓ ידע (עם תשובה נכונה)</span>
+            </label>
+            <label class="type-opt">
+              <input type="radio" name="qType" id="typeSurvey" value="survey">
+              <span>📊 סקר (ללא תשובה נכונה)</span>
+            </label>
+          </div>
+
           <label>כמות אפשרויות</label>
           <select id="optCount">
-            <option value="2">2</option><option value="3">3</option>
-            <option value="4" selected>4</option><option value="5">5</option><option value="6">6</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
           </select>
 
           <div id="optionsWrap"></div>
+
+          <!-- בחירת תשובה נכונה — נסתרת בשאלת סקר -->
+          <div id="correctAnswerSection">
+            <label>סמן את התשובה הנכונה ברשימה למעלה</label>
+          </div>
 
           <label>זמן מענה (שניות)</label>
           <input type="number" id="qSeconds" value="15" min="3" max="120">
@@ -51,7 +77,7 @@
         </form>
       </section>
 
-      <!-- ניהול משתמשים - כינויים + מחיקה + הוספה ידנית -->
+      <!-- ניהול משתמשים -->
       <section class="panel" id="panel-users" hidden>
         <form class="addq" id="addPlayerForm">
           <label>הוספת שחקן ידנית (טרם התקשר)</label>
@@ -59,7 +85,6 @@
           <input type="text" id="newPlayerName" required placeholder="כינוי">
           <button type="submit" class="btn-mini btn-block">➕ הוספת שחקן</button>
         </form>
-
         <table class="data-table" id="usersTable">
           <thead><tr><th>טלפון</th><th>כינוי</th><th></th><th></th></tr></thead>
           <tbody></tbody>
@@ -73,8 +98,7 @@
           <thead><tr><th>#</th><th>שם</th><th>ניקוד</th><th>סטטוס</th></tr></thead>
           <tbody></tbody>
         </table>
-
-        <h3>לפי מהירות (זמן ממוצע לתשובה נכונה)</h3>
+        <h3>לפי מהירות</h3>
         <table class="data-table" id="speedTable">
           <thead><tr><th>#</th><th>שם</th><th>זמן ממוצע</th><th>תשובות נכונות</th></tr></thead>
           <tbody></tbody>
@@ -92,13 +116,13 @@
     </div>
 
     <div class="drawer-footer">
-      <button class="btn-mini btn-block" id="myGamesBtn" onclick="location.href='/games.html'">🗂️ המשחקים שלי</button>
+      <button class="btn-mini btn-block" onclick="location.href='/games.html'">🗂️ המשחקים שלי</button>
       <button class="btn-mini btn-block" id="logoutBtn">🚪 התנתקות</button>
     </div>
   </aside>
   <div class="drawer-overlay" id="drawerOverlay" hidden></div>
 
-  <!-- ===== מסך ראשי מוקרן ===== -->
+  <!-- מסך ראשי -->
   <main class="live-screen">
 
     <div class="live-header">
@@ -118,44 +142,40 @@
           </svg>
           <div class="timer-num" id="timerNum">10</div>
         </div>
+        <div class="survey-badge" id="surveyBadge" hidden>📊 שאלת סקר</div>
         <h2 class="q-text" id="liveQText"></h2>
         <div class="q-options" id="liveQOptions"></div>
       </div>
 
       <div class="question-results" id="questionResults" hidden>
+        <div class="survey-badge" id="resultsSurveyBadge" hidden>📊 שאלת סקר</div>
         <h2 class="q-text" id="resultsQText"></h2>
         <div class="results-bars" id="resultsBars"></div>
       </div>
 
     </div>
 
-    <!-- טוסטים - הבזק שם כשעונים, בלי לחשוף מה נבחר -->
     <div class="toast-stack" id="toastStack"></div>
 
-    <!-- כפתור בולט - חשיפת 3 מובילים -->
     <button class="btn-top3" id="top3Btn">🏆 הצג 3 מובילים</button>
     <div class="top3-overlay" id="top3Overlay" hidden>
       <div class="top3-panel" id="top3Panel"></div>
     </div>
 
-    <!-- מסך תוצאות סופיות - עולה אוטומטית בסיום משחק (רצף אוטומטי או "סיים משחק") -->
     <div class="final-overlay" id="finalOverlay" hidden>
       <div class="final-panel">
         <div class="final-badge">🏁 המשחק הסתיים</div>
         <h2 class="top3-title">התוצאות הסופיות</h2>
         <div id="finalTop3"></div>
-
         <button class="btn-mini" id="toggleFullResults">📋 הצג טבלה מלאה</button>
         <table class="data-table final-full-table" id="finalFullTable" hidden>
           <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>
           <tbody></tbody>
         </table>
-
         <button class="btn-mini btn-block" id="closeFinalOverlay">✕ סגירה</button>
       </div>
     </div>
 
-    <!-- כפתורי שליטה קטנים למנהל, גלויים אך לא בולטים -->
     <div class="control-bar">
       <button class="btn-mini" id="startBtn">▶ התחל</button>
       <button class="btn-mini" id="pauseBtn" hidden>⏸ השהה</button>
