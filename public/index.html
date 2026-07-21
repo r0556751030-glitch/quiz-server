@@ -1,124 +1,230 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>חידון קליקרים - חידונים חיים בטלפון</title>
-<link rel="stylesheet" href="./css/index.css">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>חידון קליקרים - חידונים חיים בטלפון</title>
+
+  <link rel="stylesheet" href="./css/index.css">
+
 </head>
+
+
 <body>
-<video class="background-video"
-           autoplay
-           muted
-           loop
-           playsinline>
 
-        <source src="videos/start.mp4" type="video/mp4">
 
-    </video>
+  <video class="background-video" autoplay muted loop playsinline>
+
+    <source src="videos/start.mp4" type="video/mp4">
+
+  </video>
+
+  <div class="video-overlay"></div>
+
+  <div class="glow glow-1"></div>
+  <div class="glow glow-2"></div>
+
+
+
   <div class="nav">
-    <div class="brand"><span class="brand-mark">📻</span> חידון קליקרים</div>
-    <div class="nav-actions">
-      <button class="nav-btn" onclick="showTab('login')">כניסה</button>
-      <button class="nav-btn primary" onclick="showTab('register')">הרשמה</button>
+
+    <div class="brand">
+      <div class="brand-mark">🎉</div>
+      <span>קעמפ-קליק</span>
     </div>
+
+    <div class="nav-actions">
+
+      <button class="nav-btn" onclick="showTab('login')">
+        כניסה
+      </button>
+
+
+      <button class="nav-btn primary" onclick="showTab('register')">
+        הרשמה
+      </button>
+
+
+    </div>
+
   </div>
+
+
+
+
 
   <div class="hero">
+
+
     <div class="hero-copy">
+
       <div class="hero-badges">
-        <span class="hero-badge">🎙️ ללא אפליקציה</span>
-        <span class="hero-badge">📞 עובד מכל טלפון</span>
-        <span class="hero-badge">⚡ תוצאות בזמן אמת</span>
+        <span class="hero-badge">🎊 כיף למשפחה</span>
+        <span class="hero-badge">📱 משחקים מהטלפון</span>
+        <span class="hero-badge">⚡ ניקוד בזמן אמת</span>
       </div>
-      <h1>חידונים חיים <span>ישר מהטלפון</span></h1>
+
+      <h1>
+        ברוכים הבאים ל<span>קעמפ-קליק</span>
+      </h1>
+
+
       <p>
-        בנו משחק, הזמינו את הקהל להתקשר, והריצו חידון קליקרים חי -
-        עם שאלות, טיימר, וניקוד בזמן אמת על מסך אחד משותף. בלי אפליקציה,
-        בלי הרשמה מהצד של השחקנים - רק טלפון.
+        בנו משחק, הזמינו את הקהל להתקשר,
+        והריצו חידון קליקרים חי -
+        עם שאלות, טיימר, וניקוד בזמן אמת
+        על מסך אחד משותף
       </p>
+
+
     </div>
+
+
+
+
+
 
     <div class="auth-card">
+
+
+
       <div class="auth-tabs">
-        <div class="auth-tab active" id="tabLogin" onclick="showTab('login')">כניסה</div>
-        <div class="auth-tab" id="tabRegister" onclick="showTab('register')">הרשמה</div>
+
+
+        <div class="auth-tab active" id="tabLogin" onclick="showTab('login')">
+
+          כניסה
+
+        </div>
+
+
+
+        <div class="auth-tab" id="tabRegister" onclick="showTab('register')">
+
+          הרשמה
+
+        </div>
+
+
       </div>
 
-      <form class="auth-form" id="loginForm">
+
+
+
+
+
+
+      <form class="auth-form active" id="loginForm">
+
+
         <input type="text" id="loginUsername" placeholder="שם משתמש" required autocomplete="username">
+
+
+
         <input type="password" id="loginPassword" placeholder="סיסמה" required autocomplete="current-password">
-        <button type="submit" class="auth-submit">כניסה לחשבון</button>
-        <div class="auth-error" id="loginError"></div>
-        <div class="auth-hint">אין לך חשבון? <a onclick="showTab('register')">הרשמה</a></div>
+
+
+
+        <button type="submit" class="auth-submit">
+
+          כניסה לחשבון
+
+        </button>
+
+
+
+        <div class="auth-error" id="loginError">
+
+        </div>
+
+
+
+        <div class="auth-hint">
+
+          אין לך חשבון?
+
+          <a onclick="showTab('register')">
+            הרשמה
+          </a>
+
+        </div>
+
+
+
       </form>
 
-      <form class="auth-form" id="registerForm" hidden>
+
+
+
+
+
+
+
+      <form class="auth-form" id="registerForm">
+
+
         <input type="text" id="regUsername" placeholder="בחר שם משתמש" required minlength="3" autocomplete="username">
-        <input type="password" id="regPassword" placeholder="בחר סיסמה (לפחות 6 תווים)" required minlength="6" autocomplete="new-password">
-        <button type="submit" class="auth-submit">יצירת חשבון</button>
-        <div class="auth-error" id="registerError"></div>
-        <div class="auth-hint">כבר יש לך חשבון? <a onclick="showTab('login')">כניסה</a></div>
+
+
+
+        <input type="password" id="regPassword" placeholder="בחר סיסמה (לפחות 6 תווים)" required minlength="6"
+          autocomplete="new-password">
+
+
+
+        <button type="submit" class="auth-submit">
+
+          יצירת חשבון
+
+        </button>
+
+
+
+        <div class="auth-error" id="registerError">
+
+        </div>
+
+
+
+        <div class="auth-hint">
+
+          כבר יש לך חשבון?
+
+          <a onclick="showTab('login')">
+            כניסה
+          </a>
+
+        </div>
+
+
       </form>
 
-      <div class="admin-link" onclick="location.href='/admin-login.html'">כניסת מנהל מערכת</div>
+
+
+
+      <div class="admin-link" onclick="location.href='/admin-login.html'">
+
+        כניסת מנהל מערכת
+
+      </div>
+
+
+
     </div>
+
+
   </div>
 
-<script>
-function showTab(tab) {
-  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
-  document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
-  document.getElementById('loginForm').hidden = tab !== 'login';
-  document.getElementById('registerForm').hidden = tab !== 'register';
-}
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const errEl = document.getElementById('loginError');
-  errEl.textContent = '';
-  try {
-    const res = await fetch('/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: document.getElementById('loginUsername').value.trim(),
-        password: document.getElementById('loginPassword').value
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'שגיאה בכניסה'; return; }
-    location.href = '/games.html';
-  } catch {
-    errEl.textContent = 'שגיאת רשת - נסו שוב';
-  }
-});
 
-document.getElementById('registerForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const errEl = document.getElementById('registerError');
-  errEl.textContent = '';
-  try {
-    const res = await fetch('/admin/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: document.getElementById('regUsername').value.trim(),
-        password: document.getElementById('regPassword').value
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'שגיאה בהרשמה'; return; }
-    location.href = '/games.html';
-  } catch {
-    errEl.textContent = 'שגיאת רשת - נסו שוב';
-  }
-});
 
-// אם כבר יש session תקף - עוקפים ישר לרשימת המשחקים
-fetch('/admin/me').then(r => r.json()).then(d => {
-  if (d.authenticated) location.href = '/games.html';
-});
-</script>
+
+  <script src="./js/index.js"></script>
+
+
 </body>
+
 </html>
