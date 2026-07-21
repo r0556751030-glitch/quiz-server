@@ -251,13 +251,13 @@ fetch('/admin/me')
 });
 
 function showAlreadyLoggedInBar(d) {
-    const label = d.role === 'admin' ? '🔐 מנהל מערכת' : `👤 ${d.username}`;
+    const label = d.role === 'admin' ? ' מנהל מערכת' : ` ${d.username}`;
 
     const bar = document.createElement('div');
     bar.id = 'alreadyInBar';
     bar.className = 'already-in-bar';
     bar.innerHTML = `
-        <span>מחובר בתור ${label}</span>
+        <span>${label}  </span>
         <span id="continueLink" class="already-in-link">המשך לאזור האישי ←</span>
     `;
     document.body.prepend(bar);

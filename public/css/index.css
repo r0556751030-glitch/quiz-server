@@ -257,21 +257,22 @@ html, body {
 }
 .admin-link:hover { opacity: 1; }
 
-/* ─── פס "כבר מחובר" (מוצג רק אם יש session פעיל, index.js) ───────── */
 .already-in-bar {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 0; 
+  right:10vw; 
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   background: rgba(20, 10, 14, 0.9);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--border);
   color: var(--text);
   font-size: 13.5px;
-  padding: 10px 16px;
+  width:20vw;
+  height:10vh;
+  
 }
 .already-in-link {
   color: var(--gold-light);
