@@ -184,10 +184,14 @@ socket.on('questionResults', (r) => {
     });
   });
 });
-
-socket.on('gamePaused', () => setControlState('paused'));
-socket.on('gameResumed', () => setControlState('resumed'));
-
+socket.on('gamePaused', () => {
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+    setControlState('paused');
+});
+socket.on('gameResumed', () => {
+    setControlState('resumed');
+    // הטיימר יתחדש בעצמו כש-questionOpened יגיע עם השאלה הבאה
+});
 // ===================================================================
 // מסך תוצאות סופיות
 // ===================================================================
