@@ -97,4 +97,11 @@ setInterval(async () => {
     }
 }, CONFIG.SWEEP_INTERVAL_MS);
 
+// Keep-alive ping — מונע כיבוי של Render Free Tier
+if (process.env.RENDER_EXTERNAL_URL) {
+    setInterval(() => {
+        fetch(process.env.RENDER_EXTERNAL_URL + '/admin/me')
+            .catch(() => { }); // שגיאה בשקט
+    }, 10 * 60 * 1000); // כל 10 דקות
+}
 module.exports = { app, server, io };
