@@ -67,28 +67,47 @@ function armQuestionTimers(app, question) {
     }, closeDelay);
 }
 
-// פתיחת שאלה: תשובות נקלטות מיידית (state.status='open' מהשנייה הראשונה) -
-// זה נותן לימות "ראש-התחלה" להתגבר על הפיגור הטבעי שלו לפני שהוא מתחיל
-// להאזין ללחיצות בפועל. הצופים רואים את השאלה, אבל הטיימר הגלוי מתעכב
-// ב-READING_SECONDS - כך שעד שהם רואים אותו זז, ימות כבר קולט לחיצות בזמן אמת.
+// פתיחת שאלה: רק מציגה אותה על המסך (state.status='displayed') - בלי טיימר,
+// בלי קליטת תשובות. הכל ממתין ללחיצת המנחה על "פתיחת מענה" (ראו beginAnswering).
+// זה נותן למנחה שליטה מלאה על הקצב - השאלה מוצגת, הקהל קורא אותה, ורק כשהמנחה
+// מוכן הוא פותח את המענה בפועל.
 async function openQuestion(app, question) {
     if (visualTimer) clearTimeout(visualTimer);
     if (closeTimer) clearTimeout(closeTimer);
 
-    state.status = 'open';
+    state.status = 'displayed';
     state.currentQuestion = question;
+    state.openedAt = null;
+    state.pausedRemainingMs = null;
+
+    app.get('io').emit('questionOpened', {
+        question,
+        autoAdvance: state.autoAdvance
+    });
+}
+
+// פתיחת המענה בפועל (נקרא מ-POST /admin/begin-answering, אחרי לחיצת המנחה):
+// תשובות נקלטות מיידית (state.status='open' מהשנייה הראשונה) - זה נותן לימות
+// "ראש-התחלה" להתגבר על הפיגור הטבעי שלו לפני שהוא מתחיל להאזין ללחיצות בפועל.
+// הצופים רואים את הטיימר הגלוי רק אחרי READING_SECONDS - כך שעד שהם רואים אותו
+// זז, ימות כבר קולט לחיצות בזמן אמת.
+async function beginAnswering(app) {
+    const question = state.currentQuestion;
+    if (!question || state.status !== 'displayed') return false;
+
+    state.status = 'open';
     state.openedAt = Date.now();
     state.pausedRemainingMs = null;
     state.playersAtOpen = await Player.countDocuments({ active: true, game: question.game });
 
-    app.get('io').emit('questionOpened', {
-        question,
-        autoAdvance: state.autoAdvance,
+    app.get('io').emit('answeringBegan', {
+        questionId: question._id,
         readingSeconds: CONFIG.READING_SECONDS,
         answerWindowSeconds: question.answerWindowSeconds
     });
 
     armQuestionTimers(app, question);
+    return true;
 }
 
 async function computeAndEmitResults(app, question, openedAt) {
@@ -219,6 +238,13 @@ router.post('/start-game', requireLiveGameOwnership, async (req, res) => {
     res.json({ success: true });
 });
 
+// נלחץ מכפתור "פתיחת מענה" אצל המנחה - זה הרגע שבו קליטת התשובות בפועל מתחילה
+router.post('/begin-answering', requireLiveGameOwnership, async (req, res) => {
+    const ok = await beginAnswering(req.app);
+    if (!ok) return res.status(400).json({ error: 'אין שאלה מוצגת שממתינה לפתיחת מענה' });
+    res.json({ success: true });
+});
+
 // השהיה אמיתית: אם יש שאלה פתוחה כרגע, מקפיאים אותה בפועל - מפסיקים לקלוט
 // תשובות (status הופך ל-'paused', לא 'open', ו-yemotRoutes.js בודק בדיוק
 // את זה) ומבטלים את שני הטיימרים כדי שלא ייסגר/יתחיל טיימר גלוי באמצע ההשהיה.
@@ -252,7 +278,7 @@ router.post('/resume', requireLiveGameOwnership, async (req, res) => {
         state.pausedRemainingMs = null;
         state.status = 'open';
         armQuestionTimers(req.app, question);
-    } else if (state.status !== 'open' && state.status !== 'paused') {
+    } else if (state.status !== 'open' && state.status !== 'paused' && state.status !== 'displayed') {
         const next = state.currentQuestion
             ? await Question.findOne({ game: req.gameId, order: { $gt: state.currentQuestion.order } }).sort({ order: 1 })
             : await Question.findOne({ game: req.gameId }).sort({ order: 1 });

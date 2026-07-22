@@ -100,6 +100,8 @@ function showAnswerToast(label) {
 // ===================================================================
 // שלב "קריאת השאלה": השאלה מוצגת, אבל הטיימר עוד לא רץ ותשובות עדיין
 // לא נקלטות בשרת. הטיימר יתחיל בפועל רק עם אירוע questionTimerStarted.
+// שלב "הצגה בלבד": השאלה מוצגת על המסך, בלי טיימר ובלי קליטת תשובות בשרת.
+// ממתין ללחיצת המנחה על "פתיחת מענה" (ראו beginAnswerBtn למטה).
 socket.on('questionOpened', (data) => {
   document.getElementById('idleState').hidden = true;
   document.getElementById('questionResults').hidden = true;
@@ -111,8 +113,29 @@ socket.on('questionOpened', (data) => {
 
   document.getElementById('liveQText').textContent = data.question.text;
   renderLiveOptions(data.question.options);
+  showDisplayedState();
+  setControlState('displayed');
+});
+
+// מציג את השאלה בלי טיימר בכלל, וחושף את כפתור "פתיחת מענה" למנחה
+function showDisplayedState() {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  document.querySelector('.timer-wrap').hidden = true;
+  document.getElementById('beginAnswerBtn').hidden = false;
+}
+
+// המנחה לחץ "פתיחת מענה" - מכאן והלאה זהה למה שהיה קורה אוטומטית בעבר:
+// טבעת "ממתינים" עד שהטיימר הגלוי מתחיל בפועל (questionTimerStarted).
+socket.on('answeringBegan', () => {
+  document.getElementById('beginAnswerBtn').hidden = true;
+  document.querySelector('.timer-wrap').hidden = false;
   showReadyState();
   setControlState('open');
+});
+
+document.getElementById('beginAnswerBtn').addEventListener('click', async () => {
+  const res = await authFetch('/admin/begin-answering', { method: 'POST' });
+  if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
 });
 
 // הטבעת מוצגת מלאה ("..."), בלי לרדת, כל עוד אנחנו בשלב הקריאה
@@ -216,7 +239,7 @@ socket.on('gameEnded', ({ results }) => {
   document.getElementById('questionResults').hidden = true;
   const idle = document.getElementById('idleState');
   idle.hidden = false;
-  idle.textContent = '🏁 המשחק הסתיים';
+  idle.textContent = 'המשחק הסתיים';
   showFinalResults(results);
 });
 
@@ -225,7 +248,7 @@ function ensureBackToGamesButton() {
   const btn = document.createElement('button');
   btn.id = 'backToGamesBtn';
   btn.className = 'btn-mini';
-  btn.textContent = '🏠 חזרה לרשימת המשחקים';
+  btn.textContent = 'חזרה לרשימת המשחקים';
   btn.addEventListener('click', () => { location.href = '/games.html'; });
   document.getElementById('closeFinalOverlay').insertAdjacentElement('afterend', btn);
 }
@@ -255,7 +278,7 @@ function showFinalResults(results) {
     `).join('') || '<tr><td colspan="5" class="muted">אין נתונים</td></tr>';
 
   document.getElementById('finalFullTable').hidden = true;
-  document.getElementById('toggleFullResults').textContent = '📋 הצג טבלה מלאה';
+  document.getElementById('toggleFullResults').textContent = 'הצג טבלה מלאה';
   document.getElementById('finalOverlay').hidden = false;
   ensureBackToGamesButton();
 }
@@ -264,7 +287,7 @@ document.getElementById('toggleFullResults').addEventListener('click', () => {
   const table = document.getElementById('finalFullTable');
   table.hidden = !table.hidden;
   document.getElementById('toggleFullResults').textContent =
-    table.hidden ? '📋 הצג טבלה מלאה' : '🔼 הסתר טבלה';
+    table.hidden ? 'הצג טבלה מלאה' : 'הסתר טבלה';
 });
 
 document.getElementById('closeFinalOverlay').addEventListener('click', () => {
@@ -284,15 +307,20 @@ function setControlState(kind) {
   const pauseBtn = document.getElementById('pauseBtn');
   const closeBtn = document.getElementById('closeBtn');
 
+  if (kind === 'displayed') {
+    startBtn.hidden = true;
+    pauseBtn.hidden = true;
+    closeBtn.hidden = false;
+  }
   if (kind === 'open') {
     startBtn.hidden = true;
     pauseBtn.hidden = false;
-    pauseBtn.textContent = '⏸ השהה';
+    pauseBtn.textContent = 'השהה';
     closeBtn.hidden = false;
   }
   if (kind === 'closed') closeBtn.hidden = true;
-  if (kind === 'paused') pauseBtn.textContent = '▶ המשך';
-  if (kind === 'resumed') pauseBtn.textContent = '⏸ השהה';
+  if (kind === 'paused') pauseBtn.textContent = 'המשך';
+  if (kind === 'resumed') pauseBtn.textContent = 'השהה';
 }
 
 document.getElementById('startBtn').addEventListener('click', async () => {
@@ -605,6 +633,20 @@ async function loadStatus() {
   updateConnectedCount();
 
   if (s.activeGame) document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
+
+  if (s.status === 'displayed' && s.currentQuestion) {
+    document.getElementById('idleState').hidden = true;
+    document.getElementById('questionResults').hidden = true;
+    document.getElementById('questionLive').hidden = false;
+
+    const surveyBadge = document.getElementById('surveyBadge');
+    if (surveyBadge) surveyBadge.hidden = !s.currentQuestion.isSurvey;
+
+    document.getElementById('liveQText').textContent = s.currentQuestion.text;
+    renderLiveOptions(s.currentQuestion.options);
+    showDisplayedState();
+    setControlState('displayed');
+  }
 
   if ((s.status === 'open' || s.status === 'paused') && s.currentQuestion) {
     document.getElementById('idleState').hidden = true;

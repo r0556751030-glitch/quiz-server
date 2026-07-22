@@ -606,6 +606,33 @@ form.addq select:focus {
   border-radius: 20px;
 }
 
+.begin-answer-row {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-begin-answer {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(15px, 2.2vh, 20px);
+  padding: clamp(10px, 1.6vh, 15px) clamp(20px, 2.4vw, 32px);
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, var(--gold), var(--stage-ruby));
+  color: #2a0a0a;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(255,176,46,0.35), 0 4px 16px rgba(0,0,0,0.4);
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+.btn-begin-answer:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.btn-begin-answer:active {
+  transform: scale(0.97);
+}
+
 .timer-wrap {
   position: relative;
   width: clamp(84px, 13vh, 128px);
