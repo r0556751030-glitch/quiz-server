@@ -400,7 +400,7 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
   for (let i = 0; i < 3; i++) {
     const p = top3[i];
     document.getElementById('leaderName' + (i + 1)).textContent = p ? (p.name || p.phone) : '—';
-    document.getElementById('leaderScore' + (i + 1)).textContent = p ? p.score : '';
+    document.getElementById('leaderScore' + (i + 1)).textContent = p ? p.score + ' נק\'' : '';
   }
 
   overlay.hidden = false;

@@ -117,19 +117,15 @@ html, body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(10px,2.5vh,26px) clamp(20px,4vw,60px) clamp(180px,24vh,260px);
   z-index: 1;
 }
 
 /* ─── Live header ────────────────────────────────────────── */
 
 .live-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
   padding: clamp(10px,1.8vh,20px) clamp(20px,3vw,40px);
   display: flex;
   align-items: center;
@@ -137,6 +133,20 @@ html, body {
   gap: 14px;
   direction: rtl;
   z-index: 10;
+}
+
+/* ─── אזור מרכזי - מכיל את שלב השאלה וממורכז תמיד בוודאות, ─────
+   בלי תלות בגובה בפועל של הכותרת/סרגל הבקרה ──────────────── */
+.stage-middle {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(6px,1.5vh,16px) clamp(20px,4vw,60px);
+  position: relative;
+  overflow: hidden;
 }
 
 .crest {
@@ -578,14 +588,15 @@ form.addq select:focus {
 .question-stage {
   width: 100%;
   max-width: min(1500px, 92vw);
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: clamp(16px, 3.5vh, 34px);
   position: relative;
   z-index: 2;
-  height: 100%;
-  justify-content: center;
+  overflow: auto;
 }
 
 /* ─── Idle state / מסך המתנה ─────────────────────────────── */
@@ -715,6 +726,12 @@ form.addq select:focus {
 }
 
 .btn-begin-answer img { height: clamp(130px, 21vh, 240px); }
+
+/* הכפתורים בסרגל הבקרה התחתון (התחל/סגור/השהה/סיים) - קטנים משמעותית
+   מיתר כפתורי-האייקון (למשל "הצג מובילים" לא מושפע, כי יש לו כלל נפרד) */
+.control-bar .btn-icon img {
+  height: clamp(46px, 6.5vh, 74px);
+}
 
 /* ─── חצי ניווט (שאלה קודמת/הבאה) ────────────────────────── */
 
@@ -946,11 +963,11 @@ form.addq select:focus {
 /* ─── Toast stack ────────────────────────────────────────── */
 
 .toast-stack {
-  position: fixed;
-  left: 3vw;
-  right: 3vw;
-  top: 62vh;
-  bottom: 210px;
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  top: 60%;
+  bottom: 2%;
   z-index: 800;
   pointer-events: none;
   overflow: hidden;
@@ -1087,39 +1104,47 @@ form.addq select:focus {
 
 .leaders-row {
   position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
 }
-/* מיקום מדויק לפי הצילום של הכרטיס עצמו (848x1264) */
+/* מיקום מדויק לפי הצילום של הכרטיס עצמו (848x1264) - בתוך הפס הכהה, לא על המטבע */
 .leaders-row-1 { top: 39.5%; transform: translateY(-50%); }
 .leaders-row-2 { top: 57.4%; transform: translateY(-50%); }
 .leaders-row-3 { top: 77.3%; transform: translateY(-50%); }
 
-.leaders-score {
-  position: absolute;
-  right: 74%;
-  width: 24%;
-  text-align: center;
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 1.7em;
-  color: #3a1a08;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
-}
-
-.leaders-name {
+.leaders-info {
   position: absolute;
   right: 29%;
   width: 45%;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1em;
+}
+
+.leaders-name {
   font-family: var(--font-body);
   font-weight: 800;
-  font-size: 1.9em;
+  font-size: 1.55em;
   color: var(--gold-light);
   text-shadow: 0 2px 12px rgba(0,0,0,0.8);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.15;
+}
+
+.leaders-score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1em;
+  color: var(--text);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  line-height: 1.1;
 }
 
 .top3-title {
@@ -1243,10 +1268,9 @@ form.addq select:focus {
 /* ─── Control bar ────────────────────────────────────────── */
 
 .control-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
   z-index: 700;
   display: flex;
   align-items: center;

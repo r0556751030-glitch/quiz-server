@@ -127,15 +127,16 @@
   <main class="live-screen">
 
     <div class="live-header">
-      <span class="conn-dot off" id="connDot"></span>
+      <img class="crest" src="/images/logo-trophy.png" alt="קעמפ-קליק">
       <div class="header-center">
         <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
         <div class="last-joined" id="lastJoined" hidden>הצטרפ/ה: <span id="lastJoinedName"></span></div>
       </div>
-      <img class="crest" src="/images/logo-trophy.png" alt="קעמפ-קליק">
+      <span class="conn-dot off" id="connDot"></span>
     </div>
 
-    <div class="question-stage" id="questionStage">
+    <div class="stage-middle">
+      <div class="question-stage" id="questionStage">
 
       <div class="idle-state" id="idleState">
         <div class="call-card">
@@ -177,9 +178,10 @@
         <div class="results-bars" id="resultsBars"></div>
       </div>
 
-    </div>
+      </div>
 
-    <div class="toast-stack" id="toastStack"></div>
+      <div class="toast-stack" id="toastStack"></div>
+    </div>
 
     <button class="btn-icon btn-top3" id="top3Btn" title="הצג מובילים">
       <img src="/images/icon-show-leaders.png" alt="הצג מובילים">
@@ -192,16 +194,22 @@
       <div class="leaders-card" id="top3Panel">
         <img class="leaders-card-img" src="/images/leaders.png" alt="המובילים">
         <div class="leaders-row leaders-row-1">
-          <span class="leaders-score" id="leaderScore1"></span>
-          <span class="leaders-name" id="leaderName1"></span>
+          <div class="leaders-info">
+            <span class="leaders-name" id="leaderName1"></span>
+            <span class="leaders-score" id="leaderScore1"></span>
+          </div>
         </div>
         <div class="leaders-row leaders-row-2">
-          <span class="leaders-score" id="leaderScore2"></span>
-          <span class="leaders-name" id="leaderName2"></span>
+          <div class="leaders-info">
+            <span class="leaders-name" id="leaderName2"></span>
+            <span class="leaders-score" id="leaderScore2"></span>
+          </div>
         </div>
         <div class="leaders-row leaders-row-3">
-          <span class="leaders-score" id="leaderScore3"></span>
-          <span class="leaders-name" id="leaderName3"></span>
+          <div class="leaders-info">
+            <span class="leaders-name" id="leaderName3"></span>
+            <span class="leaders-score" id="leaderScore3"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -225,7 +233,7 @@
 
     <div class="control-bar">
       <button class="btn-nav-arrow" id="prevQBtn" title="שאלה קודמת" aria-label="שאלה קודמת">
-        <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg>
       </button>
 
       <button class="btn-icon" id="startBtn" title="התחל משחק">
@@ -242,7 +250,7 @@
       </button>
 
       <button class="btn-nav-arrow" id="nextQBtn" title="שאלה הבאה" aria-label="שאלה הבאה">
-        <svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg>
       </button>
     </div>
 
