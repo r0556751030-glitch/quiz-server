@@ -67,6 +67,18 @@ function armQuestionTimers(app, question) {
     }, closeDelay);
 }
 
+// בודק אם קיימת שאלה קודמת/הבאה ביחס לשאלה נתונה, לפי order. נשלח ללקוח
+// יחד עם כל פתיחת שאלה - כדי שחצי הניווט ידעו מיד אם להיות פעילים, בלי
+// להסתמך על רשימת השאלות שנטענת בנפרד אצל הלקוח (מונע מצב של חצים "תקועים").
+async function getNavAvailability(gameId, question) {
+    if (!question) return { hasNext: false, hasPrev: false };
+    const [next, prev] = await Promise.all([
+        Question.findOne({ game: gameId, order: { $gt: question.order } }),
+        Question.findOne({ game: gameId, order: { $lt: question.order } })
+    ]);
+    return { hasNext: !!next, hasPrev: !!prev };
+}
+
 // פתיחת שאלה: רק מציגה אותה על המסך (state.status='displayed') - בלי טיימר,
 // בלי קליטת תשובות. הכל ממתין ללחיצת המנחה על "פתיחת מענה" (ראו beginAnswering).
 // זה נותן למנחה שליטה מלאה על הקצב - השאלה מוצגת, הקהל קורא אותה, ורק כשהמנחה
@@ -80,9 +92,11 @@ async function openQuestion(app, question) {
     state.openedAt = null;
     state.pausedRemainingMs = null;
 
+    const nav = await getNavAvailability(question.game, question);
     app.get('io').emit('questionOpened', {
         question,
-        autoAdvance: state.autoAdvance
+        autoAdvance: state.autoAdvance,
+        ...nav
     });
 }
 
@@ -229,9 +243,44 @@ router.post('/open-question/:id', requireLiveGameOwnership, async (req, res) => 
     res.json({ success: true, question });
 });
 
+// ניווט ידני לשאלה הבאה/הקודמת לפי סדר (order). משתמש באותה openQuestion() -
+// כלומר השאלה רק מוצגת, וממתינה ללחיצת "פתיחת מענה" של המנחה, בדיוק כמו כל שאלה אחרת.
+router.post('/next-question', requireLiveGameOwnership, async (req, res) => {
+    if (advanceTimer) clearTimeout(advanceTimer);
+    const current = state.currentQuestion;
+    const query = current
+        ? { game: req.gameId, order: { $gt: current.order } }
+        : { game: req.gameId };
+    const next = await Question.findOne(query).sort({ order: 1 });
+    if (!next) return res.status(400).json({ error: 'זו כבר השאלה האחרונה' });
+    await openQuestion(req.app, next);
+    res.json({ success: true, question: next });
+});
+
+router.post('/prev-question', requireLiveGameOwnership, async (req, res) => {
+    if (advanceTimer) clearTimeout(advanceTimer);
+    const current = state.currentQuestion;
+    if (!current) return res.status(400).json({ error: 'אין שאלה נוכחית' });
+    const prev = await Question.findOne({ game: req.gameId, order: { $lt: current.order } }).sort({ order: -1 });
+    if (!prev) return res.status(400).json({ error: 'זו כבר השאלה הראשונה' });
+    await openQuestion(req.app, prev);
+    res.json({ success: true, question: prev });
+});
+
 router.post('/start-game', requireLiveGameOwnership, async (req, res) => {
     const first = await Question.findOne({ game: req.gameId }).sort({ order: 1 });
     if (!first) return res.status(400).json({ error: 'אין שאלות במאגר' });
+
+    // *** כאן מתבצע האיפוס בפועל ***
+    // "התחל משחק" הוא הרגע שבו בפועל מתחיל סשן חדש מבחינת המנחה - לכן כאן,
+    // ולא רק בהפעלת המשחק מ"המשחקים שלי", מוחקים את כל ה-Player וה-Answer
+    // הקודמים ששייכים למשחק הזה (req.gameId). ה-Contact (כינויים) לא נמחקים,
+    // כי הם שייכים לבן-אדם ולא לסשן ספציפי.
+    await Promise.all([
+        Player.deleteMany({ game: req.gameId }),
+        Answer.deleteMany({ game: req.gameId })
+    ]);
+
     state.autoAdvance = true;
     if (advanceTimer) clearTimeout(advanceTimer);
     await openQuestion(req.app, first);
@@ -325,7 +374,11 @@ router.post('/end-game', requireLiveGameOwnership, async (req, res) => {
 // ===== קריאת מידע — requireAuth בלבד, ללא requireLiveGameOwnership =====
 // (עובדים גם כשאין משחק פעיל, מחזירים מידע ריק או null)
 
-router.get('/status', (req, res) => {
+router.get('/status', async (req, res) => {
+    const nav = await getNavAvailability(
+        state.activeGame ? state.activeGame._id : null,
+        state.currentQuestion
+    );
     res.json({
         status: state.status,
         currentQuestion: state.currentQuestion,
@@ -333,7 +386,8 @@ router.get('/status', (req, res) => {
         openedAt: state.openedAt,
         readingSeconds: CONFIG.READING_SECONDS,
         playersAtOpen: state.playersAtOpen,
-        activeGame: state.activeGame
+        activeGame: state.activeGame,
+        ...nav
     });
 });
 

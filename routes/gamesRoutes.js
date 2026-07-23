@@ -72,10 +72,20 @@ router.delete('/:gameId', requireGameOwnership, async (req, res) => {
 });
 
 // ===== הפעלת המשחק הזה כ"חי" - רק משחק אחד יכול להיות חי בו-זמנית בכל המערכת =====
+// כל הפעלה (גם של אותו משחק שכבר רץ בעבר) = "סשן" חדש: מוחקים שחקנים ותשובות
+// כדי שהלוח יתחיל נקי (ניקוד 0, בלי זמני תגובה ישנים). כינויים (Contact) נשארים,
+// כי הם שייכים לאנשים ולא לסשן ספציפי. תוך כדי משחק רץ (השהיה/המשך/מעבר שאלות)
+// אין כאן שום מחיקה - שם הניקוד כמובן נשמר כרגיל.
 router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
   await Game.updateMany({ _id: { $ne: req.game._id } }, { isActive: false });
   req.game.isActive = true;
   await req.game.save();
+
+  await Promise.all([
+    Player.deleteMany({ game: req.game._id }),
+    Answer.deleteMany({ game: req.game._id })
+  ]);
+
   setActiveGame(req.game);
 
   req.app.get('io').emit('gameSwitched', { gameId: req.game._id, gameName: req.game.name });

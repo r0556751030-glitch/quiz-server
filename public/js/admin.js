@@ -47,7 +47,13 @@ checkAuth();
 // ===================================================================
 // מונה מחוברים
 // ===================================================================
-socket.on('playerConnected', (p) => { activeCallIds.add(p.callId); updateConnectedCount(); });
+socket.on('playerConnected', (p) => {
+  activeCallIds.add(p.callId);
+  updateConnectedCount();
+  const lastJoined = document.getElementById('lastJoined');
+  document.getElementById('lastJoinedName').textContent = p.name || p.phone || '';
+  lastJoined.hidden = false;
+});
 socket.on('playerDisconnected', (p) => { activeCallIds.delete(p.callId); updateConnectedCount(); });
 function updateConnectedCount() {
   document.getElementById('connectedCount').textContent = activeCallIds.size;
@@ -89,11 +95,21 @@ function showAnswerToast(label) {
   el.className = 'answer-toast';
   el.textContent = label;
   stack.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('show'));
+
+  requestAnimationFrame(() => {
+    const stackRect = stack.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const maxLeft = Math.max(0, stackRect.width - elRect.width);
+    const maxTop = Math.max(0, stackRect.height - elRect.height);
+    el.style.left = Math.round(Math.random() * maxLeft) + 'px';
+    el.style.top = Math.round(Math.random() * maxTop) + 'px';
+    requestAnimationFrame(() => el.classList.add('show'));
+  });
+
   setTimeout(() => {
     el.classList.remove('show');
     setTimeout(() => el.remove(), 400);
-  }, 1300);
+  }, 1700);
 }
 
 // ===================================================================
@@ -319,12 +335,17 @@ function setControlState(kind) {
   if (kind === 'open') {
     startBtn.hidden = true;
     pauseBtn.hidden = false;
-    pauseBtn.textContent = 'השהה';
     closeBtn.hidden = false;
   }
   if (kind === 'closed') closeBtn.hidden = true;
-  if (kind === 'paused') document.getElementById('pauseLabel').textContent = 'המשך';
-  if (kind === 'resumed') document.getElementById('pauseLabel').textContent = 'השהה';
+  if (kind === 'paused') {
+    pauseBtn.classList.add('is-paused');
+    pauseBtn.title = 'המשך';
+  }
+  if (kind === 'resumed') {
+    pauseBtn.classList.remove('is-paused');
+    pauseBtn.title = 'השהה';
+  }
 }
 
 document.getElementById('startBtn').addEventListener('click', async () => {
@@ -333,8 +354,8 @@ document.getElementById('startBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('pauseBtn').addEventListener('click', async () => {
-  const label = document.getElementById('pauseLabel');
-  if (label.textContent.includes('השהה')) await authFetch('/admin/pause', { method: 'POST' });
+  const btn = document.getElementById('pauseBtn');
+  if (!btn.classList.contains('is-paused')) await authFetch('/admin/pause', { method: 'POST' });
   else await authFetch('/admin/resume', { method: 'POST' });
 });
 
@@ -388,7 +409,12 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
 });
 
 document.getElementById('top3Overlay').addEventListener('click', (e) => {
-  if (e.target.id === 'top3Overlay') e.target.hidden = true;
+  if (e.target.id === 'top3Overlay' || e.target.classList.contains('overlay-bg-video')) {
+    document.getElementById('top3Overlay').hidden = true;
+  }
+});
+document.getElementById('top3CloseX').addEventListener('click', () => {
+  document.getElementById('top3Overlay').hidden = true;
 });
 
 // ===================================================================

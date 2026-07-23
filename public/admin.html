@@ -128,8 +128,11 @@
 
     <div class="live-header">
       <img class="crest" src="/images/logo-trophy.png" alt="קעמפ-קליק">
-      <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
-      <span class="conn-dot off" id="connDot"></span>
+      <div class="live-header-status">
+        <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
+        <div class="last-joined" id="lastJoined" hidden>הצטרפ/ה: <span id="lastJoinedName"></span></div>
+        <span class="conn-dot off" id="connDot"></span>
+      </div>
     </div>
 
     <div class="question-stage" id="questionStage">
@@ -144,10 +147,10 @@
       </div>
 
       <div class="question-live" id="questionLive" hidden>
+        <img class="survey-badge" id="surveyBadge" src="/images/badge-poll-question.png" alt="שאלת סקר" hidden>
         <div class="begin-answer-row">
-          <button class="btn-icon btn-begin-answer" id="beginAnswerBtn" hidden>
-            <img src="/images/icon-open-answer.png" alt="">
-            <span class="btn-icon-label">פתיחת מענה</span>
+          <button class="btn-icon btn-begin-answer" id="beginAnswerBtn" title="פתיחת מענה" hidden>
+            <img src="/images/icon-open-answer.png" alt="פתיחת מענה">
           </button>
         </div>
         <div class="timer-wrap">
@@ -164,7 +167,6 @@
           <div class="timer-num" id="timerNum">10</div>
           <img class="timer-hourglass" id="timerHourglass" src="/images/icon-hourglass.png" alt="ממתינים" hidden>
         </div>
-        <img class="survey-badge" id="surveyBadge" src="/images/badge-poll-question.png" alt="שאלת סקר" hidden>
         <h2 class="q-text" id="liveQText"></h2>
         <div class="q-options" id="liveQOptions"></div>
       </div>
@@ -179,14 +181,14 @@
 
     <div class="toast-stack" id="toastStack"></div>
 
-    <button class="btn-icon btn-top3" id="top3Btn">
-      <img src="/images/icon-show-leaders.png" alt="">
-      <span class="btn-icon-label">הצג מובילים</span>
+    <button class="btn-icon btn-top3" id="top3Btn" title="הצג מובילים">
+      <img src="/images/icon-show-leaders.png" alt="הצג מובילים">
     </button>
     <div class="top3-overlay" id="top3Overlay" hidden>
       <video class="overlay-bg-video" autoplay muted loop playsinline>
         <source src="/videos/start.mp4" type="video/mp4">
       </video>
+      <button class="overlay-close-x" id="top3CloseX" aria-label="סגירה" title="חזרה למשחק">✕</button>
       <div class="top3-panel" id="top3Panel"></div>
     </div>
 
@@ -212,21 +214,17 @@
         <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg>
       </button>
 
-      <button class="btn-icon" id="startBtn">
-        <img src="/images/icon-start.png" alt="">
-        <span class="btn-icon-label">התחל משחק</span>
+      <button class="btn-icon" id="startBtn" title="התחל משחק">
+        <img src="/images/icon-start.png" alt="התחל משחק">
       </button>
-      <button class="btn-icon" id="pauseBtn" hidden>
-        <img src="/images/icon-pause.png" alt="">
-        <span class="btn-icon-label" id="pauseLabel">השהה</span>
+      <button class="btn-icon" id="pauseBtn" title="השהה" hidden>
+        <img src="/images/icon-pause.png" alt="השהה / המשך">
       </button>
-      <button class="btn-icon" id="closeBtn" hidden>
-        <img src="/images/icon-close.png" alt="">
-        <span class="btn-icon-label">סגור</span>
+      <button class="btn-icon" id="closeBtn" title="סגור" hidden>
+        <img src="/images/icon-close.png" alt="סגור">
       </button>
-      <button class="btn-icon btn-end" id="endGameBtn">
-        <img src="/images/icon-finish-arrow.png" alt="">
-        <span class="btn-icon-label">סיים משחק</span>
+      <button class="btn-icon btn-end" id="endGameBtn" title="סיים משחק">
+        <img src="/images/icon-finish-arrow.png" alt="סיים משחק">
       </button>
 
       <button class="btn-nav-arrow" id="nextQBtn" title="שאלה הבאה" aria-label="שאלה הבאה">
