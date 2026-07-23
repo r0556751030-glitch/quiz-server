@@ -3,19 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>המשחקים שלי - חידון קליקרים</title>
+<title>המשחקים שלי - קעמפ-קליק</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="./css/game.css">
 </head>
 <body>
 
   <div class="topbar">
-    <div class="brand">📻 חידון קליקרים</div>
+    <div class="brand">קעמפ-קליק</div>
     <div class="who">
       <span id="whoami"></span>
-      <button class="btn" id="logoutBtn">🚪 יציאה</button>
+      <button class="btn" id="logoutBtn">התנתקות</button>
     </div>
   </div>
-  <a class="home-btn" href="/">🏠 דף הבית</a>
+  <a class="home-btn" href="/">דף הבית</a>
 
   <main>
     <h1 id="pageTitle">המשחקים שלי</h1>
@@ -23,13 +24,13 @@
 
     <form class="create-row" id="createForm">
       <input type="text" id="newGameName" placeholder="שם משחק חדש (לדוגמה: פורים 2026)" required>
-      <button type="submit" class="btn gold">➕ צור משחק</button>
+      <button type="submit" class="btn gold">צור משחק</button>
     </form>
 
     <div id="gamesList"></div>
 
     <div id="adminSection" hidden>
-      <h2 class="section-title">👥 כל המשתמשים בפלטפורמה</h2>
+      <h2 class="section-title">כל המשתמשים בפלטפורמה</h2>
       <table class="users-table">
         <thead><tr><th>שם משתמש</th><th>מספר משחקים</th><th>נרשם בתאריך</th></tr></thead>
         <tbody id="usersTbody"></tbody>
@@ -45,7 +46,7 @@ async function init() {
   if (!me.authenticated) { location.href = '/'; return; }
   myRole = me.role;
 
-  document.getElementById('whoami').textContent = me.role === 'admin' ? '🔐 מנהל מערכת' : `👤 ${me.username}`;
+  document.getElementById('whoami').textContent = me.role === 'admin' ? 'מנהל מערכת' : me.username;
   if (me.role === 'admin') {
     document.getElementById('pageTitle').textContent = 'כל המשחקים בפלטפורמה';
     document.getElementById('pageSub').textContent = 'כמנהל מערכת אתה רואה ויכול לנהל את כל המשחקים של כל המשתמשים.';
@@ -62,7 +63,7 @@ async function loadGames() {
   const list = document.getElementById('gamesList');
 
   if (!games.length) {
-    list.innerHTML = '<div class="empty">עדיין אין משחקים. צרו את הראשון למעלה 👆</div>';
+    list.innerHTML = '<div class="empty">עדיין אין משחקים. צרו את הראשון למעלה.</div>';
     return;
   }
 
@@ -72,12 +73,12 @@ async function loadGames() {
         <span class="view-name">${g.name}</span>
         ${myRole === 'admin' ? `<div class="owner-tag">בעלים: ${g.ownerUsername || '—'}</div>` : ''}
       </div>
-      <span class="status-pill ${g.isActive ? 'live' : 'off'}">${g.isActive ? '🟢 חי כרגע' : 'לא פעיל'}</span>
-      ${g.isActive ? '<button class="btn gold" onclick="location.href=\'/admin.html\'">🎬 פתח מסך חי</button>' : ''}
-      <button class="btn" data-act="activate" ${g.isActive ? 'disabled' : ''}>▶ הפעל</button>
-      <button class="btn" data-act="deactivate" ${g.isActive ? '' : 'disabled'}>⏸ הפסק</button>
-      <button class="btn" data-act="rename">✏️ שנה שם</button>
-      <button class="btn danger" data-act="delete" ${g.isActive ? 'disabled' : ''}>🗑️ מחק</button>
+      <span class="status-pill ${g.isActive ? 'live' : 'off'}">${g.isActive ? 'חי כרגע' : 'לא פעיל'}</span>
+      ${g.isActive ? '<button class="btn gold" onclick="location.href=\'/admin.html\'">פתח מסך חי</button>' : ''}
+      <button class="btn" data-act="activate" ${g.isActive ? 'disabled' : ''}>הפעל</button>
+      <button class="btn" data-act="deactivate" ${g.isActive ? '' : 'disabled'}>הפסק</button>
+      <button class="btn" data-act="rename">שנה שם</button>
+      <button class="btn danger" data-act="delete" ${g.isActive ? 'disabled' : ''}>מחק</button>
     </div>
   `).join('');
 
@@ -91,6 +92,7 @@ async function loadGames() {
 }
 
 async function activate(id) {
+  if (!confirm('הפעלת המשחק תתחיל סשן חדש: כל הניקוד והסטטיסטיקות מסשנים קודמים של משחק זה יימחקו. להמשיך?')) return;
   const res = await fetch(`/games/${id}/activate`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) { alert(data.error || 'שגיאה בהפעלת המשחק'); return; }

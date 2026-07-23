@@ -134,11 +134,21 @@
 
     <div class="question-stage" id="questionStage">
 
-      <div class="idle-state" id="idleState">ממתינים לשאלה הבאה...</div>
+      <div class="idle-state" id="idleState">
+        <div class="call-card">
+          <div class="call-card-label">כדי להצטרף למשחק</div>
+          <div class="call-card-number">077-971-0513</div>
+          <div class="call-card-ext">שלוחה 5</div>
+          <div class="call-card-note">(נא להמתין עד לסיום הפרסומת)</div>
+        </div>
+      </div>
 
       <div class="question-live" id="questionLive" hidden>
         <div class="begin-answer-row">
-          <button class="btn-begin-answer" id="beginAnswerBtn" hidden>פתיחת מענה</button>
+          <button class="btn-icon btn-begin-answer" id="beginAnswerBtn" hidden>
+            <img src="/images/icon-open-answer.png" alt="">
+            <span class="btn-icon-label">פתיחת מענה</span>
+          </button>
         </div>
         <div class="timer-wrap">
           <svg class="timer-ring" viewBox="0 0 120 120">
@@ -152,14 +162,15 @@
             <circle class="timer-ring-fg" id="timerRing" cx="60" cy="60" r="54"></circle>
           </svg>
           <div class="timer-num" id="timerNum">10</div>
+          <img class="timer-hourglass" id="timerHourglass" src="/images/icon-hourglass.png" alt="ממתינים" hidden>
         </div>
-        <div class="survey-badge" id="surveyBadge" hidden>שאלת סקר</div>
+        <img class="survey-badge" id="surveyBadge" src="/images/badge-poll-question.png" alt="שאלת סקר" hidden>
         <h2 class="q-text" id="liveQText"></h2>
         <div class="q-options" id="liveQOptions"></div>
       </div>
 
       <div class="question-results" id="questionResults" hidden>
-        <div class="survey-badge" id="resultsSurveyBadge" hidden>שאלת סקר</div>
+        <img class="survey-badge" id="resultsSurveyBadge" src="/images/badge-poll-question.png" alt="שאלת סקר" hidden>
         <h2 class="q-text" id="resultsQText"></h2>
         <div class="results-bars" id="resultsBars"></div>
       </div>
@@ -168,14 +179,17 @@
 
     <div class="toast-stack" id="toastStack"></div>
 
-    <button class="btn-top3" id="top3Btn">הצג 3 מובילים</button>
+    <button class="btn-icon btn-top3" id="top3Btn">
+      <img src="/images/icon-show-leaders.png" alt="">
+      <span class="btn-icon-label">הצג מובילים</span>
+    </button>
     <div class="top3-overlay" id="top3Overlay" hidden>
       <div class="top3-panel" id="top3Panel"></div>
     </div>
 
     <div class="final-overlay" id="finalOverlay" hidden>
       <div class="final-panel">
-        <div class="final-badge">המשחק הסתיים</div>
+        <img class="final-badge" src="/images/badge-game-over.png" alt="המשחק הסתיים">
         <h2 class="top3-title">התוצאות הסופיות</h2>
         <div id="finalTop3"></div>
         <button class="btn-mini" id="toggleFullResults">הצג טבלה מלאה</button>
@@ -188,10 +202,30 @@
     </div>
 
     <div class="control-bar">
-      <button class="btn-mini" id="startBtn">התחל</button>
-      <button class="btn-mini" id="pauseBtn" hidden>השהה</button>
-      <button class="btn-mini" id="closeBtn" hidden>סגור</button>
-      <button class="btn-mini" id="endGameBtn">סיים משחק</button>
+      <button class="btn-nav-arrow" id="prevQBtn" title="שאלה קודמת" aria-label="שאלה קודמת">
+        <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg>
+      </button>
+
+      <button class="btn-icon" id="startBtn">
+        <img src="/images/icon-start.png" alt="">
+        <span class="btn-icon-label">התחל</span>
+      </button>
+      <button class="btn-icon" id="pauseBtn" hidden>
+        <img src="/images/icon-pause.png" alt="">
+        <span class="btn-icon-label" id="pauseLabel">השהה</span>
+      </button>
+      <button class="btn-icon" id="closeBtn" hidden>
+        <img src="/images/icon-close.png" alt="">
+        <span class="btn-icon-label">סגור</span>
+      </button>
+      <button class="btn-icon btn-end" id="endGameBtn">
+        <img src="/images/icon-finish-arrow.png" alt="">
+        <span class="btn-icon-label">סיים משחק</span>
+      </button>
+
+      <button class="btn-nav-arrow" id="nextQBtn" title="שאלה הבאה" aria-label="שאלה הבאה">
+        <svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg>
+      </button>
     </div>
 
   </main>

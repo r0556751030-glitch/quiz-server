@@ -4,6 +4,7 @@ let questionsCache = [];
 let countdownInterval = null;
 let currentRole = null;
 let appInitialized = false;
+let currentOpenQuestionId = null;
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
@@ -37,6 +38,7 @@ async function authFetch(url, options) {
 function initApp() {
   if (appInitialized) return;
   appInitialized = true;
+  updateNavButtons(null);
   loadQuestions();
   loadStatus();
 }
@@ -86,7 +88,7 @@ function showAnswerToast(label) {
   const stack = document.getElementById('toastStack');
   const el = document.createElement('div');
   el.className = 'answer-toast';
-  el.textContent = '✓ ' + label + ' ענה/תה';
+  el.textContent = label;
   stack.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => {
@@ -115,6 +117,8 @@ socket.on('questionOpened', (data) => {
   renderLiveOptions(data.question.options);
   showDisplayedState();
   setControlState('displayed');
+  currentOpenQuestionId = data.question._id;
+  updateNavButtons(currentOpenQuestionId);
 });
 
 // מציג את השאלה בלי טיימר בכלל, וחושף את כפתור "פתיחת מענה" למנחה
@@ -145,7 +149,8 @@ function showReadyState() {
   const numEl = document.getElementById('timerNum');
   ring.style.strokeDasharray = RING_CIRCUMFERENCE;
   ring.style.strokeDashoffset = 0;
-  numEl.textContent = '⏳';
+  numEl.hidden = true;
+  document.getElementById('timerHourglass').hidden = false;
 }
 
 // כאן בפועל מתחיל הטיימר לרדת - ומהרגע הזה השרת גם מתחיל לקלוט תשובות
@@ -168,6 +173,8 @@ function startTimer(seconds, openedAt) {
   if (countdownInterval) clearInterval(countdownInterval);
   const ring = document.getElementById('timerRing');
   const numEl = document.getElementById('timerNum');
+  document.getElementById('timerHourglass').hidden = true;
+  numEl.hidden = false;
   ring.style.strokeDasharray = RING_CIRCUMFERENCE;
 
   function tick() {
@@ -239,7 +246,8 @@ socket.on('gameEnded', ({ results }) => {
   document.getElementById('questionResults').hidden = true;
   const idle = document.getElementById('idleState');
   idle.hidden = false;
-  idle.textContent = 'המשחק הסתיים';
+  currentOpenQuestionId = null;
+  updateNavButtons(null);
   showFinalResults(results);
 });
 
@@ -254,13 +262,12 @@ function ensureBackToGamesButton() {
 }
 
 function showFinalResults(results) {
-  const medals = ['🥇', '🥈', '🥉'];
   const top3 = results.slice(0, 3);
 
   document.getElementById('finalTop3').innerHTML = top3.length
     ? top3.map((p, i) => `
         <div class="top3-row rank-${i + 1}" style="animation-delay:${i * 0.25}s">
-          <span class="top3-medal">${medals[i]}</span>
+          <span class="top3-medal">${i + 1}</span>
           <span class="top3-name">${p.name || p.phone}</span>
           <span class="top3-score">${p.score} נק'</span>
         </div>`).join('')
@@ -319,8 +326,8 @@ function setControlState(kind) {
     closeBtn.hidden = false;
   }
   if (kind === 'closed') closeBtn.hidden = true;
-  if (kind === 'paused') pauseBtn.textContent = 'המשך';
-  if (kind === 'resumed') pauseBtn.textContent = 'השהה';
+  if (kind === 'paused') document.getElementById('pauseLabel').textContent = 'המשך';
+  if (kind === 'resumed') document.getElementById('pauseLabel').textContent = 'השהה';
 }
 
 document.getElementById('startBtn').addEventListener('click', async () => {
@@ -329,14 +336,40 @@ document.getElementById('startBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('pauseBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('pauseBtn');
-  if (btn.textContent.includes('השהה')) await authFetch('/admin/pause', { method: 'POST' });
+  const label = document.getElementById('pauseLabel');
+  if (label.textContent.includes('השהה')) await authFetch('/admin/pause', { method: 'POST' });
   else await authFetch('/admin/resume', { method: 'POST' });
 });
 
 document.getElementById('closeBtn').addEventListener('click', async () => {
   await authFetch('/admin/close-question', { method: 'POST' });
 });
+
+// ===================================================================
+// חצי ניווט - שאלה קודמת / הבאה
+// ===================================================================
+document.getElementById('prevQBtn').addEventListener('click', async () => {
+  const res = await authFetch('/admin/prev-question', { method: 'POST' });
+  if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
+});
+document.getElementById('nextQBtn').addEventListener('click', async () => {
+  const res = await authFetch('/admin/next-question', { method: 'POST' });
+  if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
+});
+
+// מעדכן את הזמינות (disabled) של החצים לפי מיקום השאלה הנוכחית ברשימה
+function updateNavButtons(currentQuestionId) {
+  const prevBtn = document.getElementById('prevQBtn');
+  const nextBtn = document.getElementById('nextQBtn');
+  if (!currentQuestionId || !questionsCache.length) {
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    return;
+  }
+  const idx = questionsCache.findIndex((q) => q._id === currentQuestionId);
+  prevBtn.disabled = idx <= 0;
+  nextBtn.disabled = idx === -1 || idx >= questionsCache.length - 1;
+}
 
 // ===================================================================
 // הצגת 3 מובילים
@@ -348,14 +381,13 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
   const res = await authFetch('/admin/leaderboard');
   const players = await res.json();
   const top3 = players.slice(0, 3);
-  const medals = ['🥇', '🥈', '🥉'];
 
   document.getElementById('top3Panel').innerHTML =
     '<h2 class="top3-title">המובילים כרגע</h2>' +
     (top3.length
       ? top3.map((p, i) => `
           <div class="top3-row rank-${i + 1}">
-            <span class="top3-medal">${medals[i]}</span>
+            <span class="top3-medal">${i + 1}</span>
             <span class="top3-name">${p.name || p.phone}</span>
             <span class="top3-score">${p.score} נק'</span>
           </div>`).join('')
@@ -404,6 +436,8 @@ async function loadQuestions() {
   const wrap = document.getElementById('qlist');
   wrap.innerHTML = '';
 
+  updateNavButtons(currentOpenQuestionId);
+
   if (questionsCache.length === 0) {
     wrap.innerHTML = '<div class="muted">עדיין לא נוספו שאלות</div>';
     return;
@@ -424,7 +458,7 @@ async function loadQuestions() {
       </div>
       <button class="btn-mini" data-up="${q._id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
       <button class="btn-mini" data-down="${q._id}" ${idx === questionsCache.length - 1 ? 'disabled' : ''}>▼</button>
-      <button class="btn-mini" data-open="${q._id}">▶ פתח</button>
+      <button class="btn-mini" data-open="${q._id}">פתח</button>
       <button class="btn-mini" data-del="${q._id}">מחק</button>
     `;
     wrap.appendChild(row);
@@ -594,7 +628,7 @@ async function loadScores() {
 
   document.querySelector('#scoresTable tbody').innerHTML =
     scores.map((p, i) => `
-      <tr><td class="rank">${i + 1}</td><td>${p.name || p.phone}</td><td>${p.score}</td><td>${p.active ? '🟢' : '⚪'}</td></tr>
+      <tr><td class="rank">${i + 1}</td><td>${p.name || p.phone}</td><td>${p.score}</td><td><span class="dot ${p.active ? 'dot-on' : 'dot-off'}"></span></td></tr>
     `).join('') || '<tr><td colspan="4" class="muted">אין עדיין נתונים</td></tr>';
 
   document.querySelector('#speedTable tbody').innerHTML =
@@ -646,6 +680,8 @@ async function loadStatus() {
     renderLiveOptions(s.currentQuestion.options);
     showDisplayedState();
     setControlState('displayed');
+    currentOpenQuestionId = s.currentQuestion._id;
+    updateNavButtons(currentOpenQuestionId);
   }
 
   if ((s.status === 'open' || s.status === 'paused') && s.currentQuestion) {
@@ -658,6 +694,8 @@ async function loadStatus() {
 
     document.getElementById('liveQText').textContent = s.currentQuestion.text;
     renderLiveOptions(s.currentQuestion.options);
+    currentOpenQuestionId = s.currentQuestion._id;
+    updateNavButtons(currentOpenQuestionId);
 
     if (s.status === 'paused') {
       // קפוא לגמרי - בלי טיימר רץ, עד שהמנהל ילחץ "המשך"
