@@ -127,12 +127,12 @@
   <main class="live-screen">
 
     <div class="live-header">
-      <img class="crest" src="/images/logo-trophy.png" alt="קעמפ-קליק">
-      <div class="live-header-status">
+      <span class="conn-dot off" id="connDot"></span>
+      <div class="header-center">
         <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
         <div class="last-joined" id="lastJoined" hidden>הצטרפ/ה: <span id="lastJoinedName"></span></div>
-        <span class="conn-dot off" id="connDot"></span>
       </div>
+      <img class="crest" src="/images/logo-trophy.png" alt="קעמפ-קליק">
     </div>
 
     <div class="question-stage" id="questionStage">
@@ -189,7 +189,21 @@
         <source src="/videos/start.mp4" type="video/mp4">
       </video>
       <button class="overlay-close-x" id="top3CloseX" aria-label="סגירה" title="חזרה למשחק">✕</button>
-      <div class="top3-panel" id="top3Panel"></div>
+      <div class="leaders-card" id="top3Panel">
+        <img class="leaders-card-img" src="/images/leaders.png" alt="המובילים">
+        <div class="leaders-row leaders-row-1">
+          <span class="leaders-score" id="leaderScore1"></span>
+          <span class="leaders-name" id="leaderName1"></span>
+        </div>
+        <div class="leaders-row leaders-row-2">
+          <span class="leaders-score" id="leaderScore2"></span>
+          <span class="leaders-name" id="leaderName2"></span>
+        </div>
+        <div class="leaders-row leaders-row-3">
+          <span class="leaders-score" id="leaderScore3"></span>
+          <span class="leaders-name" id="leaderName3"></span>
+        </div>
+      </div>
     </div>
 
     <div class="final-overlay" id="finalOverlay" hidden>
@@ -217,11 +231,11 @@
       <button class="btn-icon" id="startBtn" title="התחל משחק">
         <img src="/images/icon-start.png" alt="התחל משחק">
       </button>
-      <button class="btn-icon" id="pauseBtn" title="השהה" hidden>
-        <img src="/images/icon-pause.png" alt="השהה / המשך">
-      </button>
       <button class="btn-icon" id="closeBtn" title="סגור" hidden>
         <img src="/images/icon-close.png" alt="סגור">
+      </button>
+      <button class="btn-icon" id="pauseBtn" title="השהה" hidden>
+        <img src="/images/icon-pause.png" alt="השהה / המשך">
       </button>
       <button class="btn-icon btn-end" id="endGameBtn" title="סיים משחק">
         <img src="/images/icon-finish-arrow.png" alt="סיים משחק">

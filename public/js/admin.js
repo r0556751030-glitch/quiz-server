@@ -47,12 +47,15 @@ checkAuth();
 // ===================================================================
 // מונה מחוברים
 // ===================================================================
+let lastJoinedTimer = null;
 socket.on('playerConnected', (p) => {
   activeCallIds.add(p.callId);
   updateConnectedCount();
   const lastJoined = document.getElementById('lastJoined');
   document.getElementById('lastJoinedName').textContent = p.name || p.phone || '';
   lastJoined.hidden = false;
+  if (lastJoinedTimer) clearTimeout(lastJoinedTimer);
+  lastJoinedTimer = setTimeout(() => { lastJoined.hidden = true; }, 1000);
 });
 socket.on('playerDisconnected', (p) => { activeCallIds.delete(p.callId); updateConnectedCount(); });
 function updateConnectedCount() {
@@ -394,16 +397,11 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
   const players = await res.json();
   const top3 = players.slice(0, 3);
 
-  document.getElementById('top3Panel').innerHTML =
-    '<h2 class="top3-title">המובילים כרגע</h2>' +
-    (top3.length
-      ? top3.map((p, i) => `
-          <div class="top3-row rank-${i + 1}">
-            <span class="top3-medal">${i + 1}</span>
-            <span class="top3-name">${p.name || p.phone}</span>
-            <span class="top3-score">${p.score} נק'</span>
-          </div>`).join('')
-      : '<div class="muted">אין עדיין נתונים</div>');
+  for (let i = 0; i < 3; i++) {
+    const p = top3[i];
+    document.getElementById('leaderName' + (i + 1)).textContent = p ? (p.name || p.phone) : '—';
+    document.getElementById('leaderScore' + (i + 1)).textContent = p ? p.score : '';
+  }
 
   overlay.hidden = false;
 });
