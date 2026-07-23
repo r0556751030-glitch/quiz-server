@@ -90,36 +90,31 @@ body {
 /* ─── Home button ─────────────────────────────────────────── */
 
 .home-btn {
-  position: fixed;
-  top: 18px;
-  left: 18px;
-  z-index: 50;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px 10px 24px;
+  padding: 8px 18px 8px 22px;
   border-radius: 40px;
   border: 1.5px solid var(--gold);
   background: rgba(28,19,16,0.85);
   color: var(--gold-light);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13.5px;
   text-decoration: none;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,215,106,0.08);
   transition: box-shadow var(--transition), transform var(--transition), background var(--transition);
 }
 .home-btn::before {
   content: '';
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(135deg);
 }
 .home-btn:hover {
   background: rgba(45,28,16,0.95);
-  box-shadow: 0 6px 26px rgba(255,176,46,0.3);
+  box-shadow: 0 6px 20px rgba(255,176,46,0.3);
   transform: translateY(-1px);
 }
 

@@ -184,10 +184,16 @@
       <span class="btn-icon-label">הצג מובילים</span>
     </button>
     <div class="top3-overlay" id="top3Overlay" hidden>
+      <video class="overlay-bg-video" autoplay muted loop playsinline>
+        <source src="/videos/start.mp4" type="video/mp4">
+      </video>
       <div class="top3-panel" id="top3Panel"></div>
     </div>
 
     <div class="final-overlay" id="finalOverlay" hidden>
+      <video class="overlay-bg-video" autoplay muted loop playsinline>
+        <source src="/videos/start.mp4" type="video/mp4">
+      </video>
       <div class="final-panel">
         <img class="final-badge" src="/images/badge-game-over.png" alt="המשחק הסתיים">
         <h2 class="top3-title">התוצאות הסופיות</h2>
@@ -208,7 +214,7 @@
 
       <button class="btn-icon" id="startBtn">
         <img src="/images/icon-start.png" alt="">
-        <span class="btn-icon-label">התחל</span>
+        <span class="btn-icon-label">התחל משחק</span>
       </button>
       <button class="btn-icon" id="pauseBtn" hidden>
         <img src="/images/icon-pause.png" alt="">

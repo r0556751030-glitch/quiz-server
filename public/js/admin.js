@@ -4,7 +4,6 @@ let questionsCache = [];
 let countdownInterval = null;
 let currentRole = null;
 let appInitialized = false;
-let currentOpenQuestionId = null;
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
@@ -38,7 +37,7 @@ async function authFetch(url, options) {
 function initApp() {
   if (appInitialized) return;
   appInitialized = true;
-  updateNavButtons(null);
+  updateNavButtons(false, false);
   loadQuestions();
   loadStatus();
 }
@@ -117,8 +116,7 @@ socket.on('questionOpened', (data) => {
   renderLiveOptions(data.question.options);
   showDisplayedState();
   setControlState('displayed');
-  currentOpenQuestionId = data.question._id;
-  updateNavButtons(currentOpenQuestionId);
+  updateNavButtons(data.hasPrev, data.hasNext);
 });
 
 // מציג את השאלה בלי טיימר בכלל, וחושף את כפתור "פתיחת מענה" למנחה
@@ -246,8 +244,7 @@ socket.on('gameEnded', ({ results }) => {
   document.getElementById('questionResults').hidden = true;
   const idle = document.getElementById('idleState');
   idle.hidden = false;
-  currentOpenQuestionId = null;
-  updateNavButtons(null);
+  updateNavButtons(false, false);
   showFinalResults(results);
 });
 
@@ -357,18 +354,12 @@ document.getElementById('nextQBtn').addEventListener('click', async () => {
   if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
 });
 
-// מעדכן את הזמינות (disabled) של החצים לפי מיקום השאלה הנוכחית ברשימה
-function updateNavButtons(currentQuestionId) {
-  const prevBtn = document.getElementById('prevQBtn');
-  const nextBtn = document.getElementById('nextQBtn');
-  if (!currentQuestionId || !questionsCache.length) {
-    prevBtn.disabled = true;
-    nextBtn.disabled = true;
-    return;
-  }
-  const idx = questionsCache.findIndex((q) => q._id === currentQuestionId);
-  prevBtn.disabled = idx <= 0;
-  nextBtn.disabled = idx === -1 || idx >= questionsCache.length - 1;
+// מעדכן את הזמינות (disabled) של החצים - לפי דגלים שמגיעים ישירות מהשרת
+// (hasNext/hasPrev), ולא לפי רשימת השאלות המקומית - כדי למנוע מצב של
+// "מירוץ" שבו הרשימה עוד לא נטענה והחצים נשארים תקועים.
+function updateNavButtons(hasPrev, hasNext) {
+  document.getElementById('prevQBtn').disabled = !hasPrev;
+  document.getElementById('nextQBtn').disabled = !hasNext;
 }
 
 // ===================================================================
@@ -435,8 +426,6 @@ async function loadQuestions() {
   questionsCache = await res.json();
   const wrap = document.getElementById('qlist');
   wrap.innerHTML = '';
-
-  updateNavButtons(currentOpenQuestionId);
 
   if (questionsCache.length === 0) {
     wrap.innerHTML = '<div class="muted">עדיין לא נוספו שאלות</div>';
@@ -680,8 +669,7 @@ async function loadStatus() {
     renderLiveOptions(s.currentQuestion.options);
     showDisplayedState();
     setControlState('displayed');
-    currentOpenQuestionId = s.currentQuestion._id;
-    updateNavButtons(currentOpenQuestionId);
+    updateNavButtons(s.hasPrev, s.hasNext);
   }
 
   if ((s.status === 'open' || s.status === 'paused') && s.currentQuestion) {
@@ -694,8 +682,7 @@ async function loadStatus() {
 
     document.getElementById('liveQText').textContent = s.currentQuestion.text;
     renderLiveOptions(s.currentQuestion.options);
-    currentOpenQuestionId = s.currentQuestion._id;
-    updateNavButtons(currentOpenQuestionId);
+    updateNavButtons(s.hasPrev, s.hasNext);
 
     if (s.status === 'paused') {
       // קפוא לגמרי - בלי טיימר רץ, עד שהמנהל ילחץ "המשך"
