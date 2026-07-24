@@ -47,12 +47,15 @@ checkAuth();
 // ===================================================================
 // מונה מחוברים
 // ===================================================================
+let lastJoinedTimer = null;
 socket.on('playerConnected', (p) => {
   activeCallIds.add(p.callId);
   updateConnectedCount();
   const lastJoined = document.getElementById('lastJoined');
   document.getElementById('lastJoinedName').textContent = p.name || p.phone || '';
   lastJoined.hidden = false;
+  if (lastJoinedTimer) clearTimeout(lastJoinedTimer);
+  lastJoinedTimer = setTimeout(() => { lastJoined.hidden = true; }, 1000);
 });
 socket.on('playerDisconnected', (p) => { activeCallIds.delete(p.callId); updateConnectedCount(); });
 function updateConnectedCount() {
@@ -274,17 +277,49 @@ function ensureBackToGamesButton() {
   document.getElementById('closeFinalOverlay').insertAdjacentElement('afterend', btn);
 }
 
-function showFinalResults(results) {
-  const top3 = results.slice(0, 3);
+// הרגעים (בשניות, לפי הוידאו v-leaders.mp4) שבהם כל שם עולה בהדרגה -
+// קודם מקום 3, אחריו מקום 2, ולבסוף מקום 1 - בערך מהרגע שהבמה "נרגעת"
+// ומתייצבת. יש לכוונן את המספרים האלה אם התזמון לא מרגיש מדויק.
+const WINNERS_REVEAL_TIMES = { 3: 13.0, 2: 13.6, 1: 14.3 };
 
-  document.getElementById('finalTop3').innerHTML = top3.length
-    ? top3.map((p, i) => `
-        <div class="top3-row rank-${i + 1}" style="animation-delay:${i * 0.25}s">
-          <span class="top3-medal">${i + 1}</span>
-          <span class="top3-name">${p.name || p.phone}</span>
-          <span class="top3-score">${p.score} נק'</span>
-        </div>`).join('')
-    : '<div class="muted">לא נאספו תוצאות במשחק הזה</div>';
+// הוידאו המקורי נחתך לשחור פתאומי סביב 16.05 שניות (אחרי שכבר רואים
+// הכל בבירור) - במקום לתת לו להגיע לשם, עוצרים אותו קצת קודם, כדי
+// שהתמונה האחרונה שנשארת על המסך היא הסצנה עם הפודיומים, לא שחור.
+const WINNERS_VIDEO_SAFE_END = 15.85;
+
+function resetWinnersReveal() {
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('winnerName' + i).closest('.winners-row').classList.remove('show');
+  }
+}
+
+function attachWinnersVideoHandlers() {
+  const video = document.getElementById('winnersVideo');
+  if (video.dataset.handlersAttached) return;
+  video.dataset.handlersAttached = '1';
+
+  const revealed = new Set();
+  video.addEventListener('timeupdate', () => {
+    for (const rank of [3, 2, 1]) {
+      if (!revealed.has(rank) && video.currentTime >= WINNERS_REVEAL_TIMES[rank]) {
+        revealed.add(rank);
+        document.getElementById('winnerName' + rank).closest('.winners-row').classList.add('show');
+      }
+    }
+    if (video.currentTime >= WINNERS_VIDEO_SAFE_END) {
+      video.pause();
+      video.currentTime = WINNERS_VIDEO_SAFE_END;
+    }
+  });
+  video.addEventListener('play', () => { revealed.clear(); resetWinnersReveal(); });
+}
+
+function showFinalResults(results) {
+  for (let i = 0; i < 3; i++) {
+    const p = results[i];
+    document.getElementById('winnerName' + (i + 1)).textContent = p ? (p.name || p.phone) : '';
+    document.getElementById('winnerScore' + (i + 1)).textContent = p ? p.score + ' נק\'' : '';
+  }
 
   document.querySelector('#finalFullTable tbody').innerHTML =
     results.map((p) => `
@@ -301,6 +336,14 @@ function showFinalResults(results) {
   document.getElementById('toggleFullResults').textContent = 'הצג טבלה מלאה';
   document.getElementById('finalOverlay').hidden = false;
   ensureBackToGamesButton();
+
+  // מפעיל את סרטון הפודיום מההתחלה בכל סיום משחק (השמות מתחילים מוסתרים
+  // ועולים בהדרגה - ראה attachWinnersVideoHandlers / WINNERS_REVEAL_TIMES)
+  const video = document.getElementById('winnersVideo');
+  attachWinnersVideoHandlers();
+  resetWinnersReveal();
+  video.currentTime = 0;
+  video.play().catch(() => {});
 }
 
 document.getElementById('toggleFullResults').addEventListener('click', () => {
@@ -394,16 +437,11 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
   const players = await res.json();
   const top3 = players.slice(0, 3);
 
-  document.getElementById('top3Panel').innerHTML =
-    '<h2 class="top3-title">המובילים כרגע</h2>' +
-    (top3.length
-      ? top3.map((p, i) => `
-          <div class="top3-row rank-${i + 1}">
-            <span class="top3-medal">${i + 1}</span>
-            <span class="top3-name">${p.name || p.phone}</span>
-            <span class="top3-score">${p.score} נק'</span>
-          </div>`).join('')
-      : '<div class="muted">אין עדיין נתונים</div>');
+  for (let i = 0; i < 3; i++) {
+    const p = top3[i];
+    document.getElementById('leaderName' + (i + 1)).textContent = p ? (p.name || p.phone) : '—';
+    document.getElementById('leaderScore' + (i + 1)).textContent = p ? p.score + ' נק\'' : '';
+  }
 
   overlay.hidden = false;
 });

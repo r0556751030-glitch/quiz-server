@@ -117,19 +117,15 @@ html, body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(10px,2.5vh,26px) clamp(20px,4vw,60px) clamp(180px,24vh,260px);
   z-index: 1;
 }
 
 /* ─── Live header ────────────────────────────────────────── */
 
 .live-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
   padding: clamp(10px,1.8vh,20px) clamp(20px,3vw,40px);
   display: flex;
   align-items: center;
@@ -139,18 +135,35 @@ html, body {
   z-index: 10;
 }
 
+/* ─── אזור מרכזי - מכיל את שלב השאלה וממורכז תמיד בוודאות, ─────
+   בלי תלות בגובה בפועל של הכותרת/סרגל הבקרה ──────────────── */
+.stage-middle {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(6px,1.5vh,16px) clamp(20px,4vw,60px);
+  position: relative;
+  overflow: hidden;
+}
+
 .crest {
   height: clamp(42px, 8.5vh, 74px);
   width: auto;
   filter: drop-shadow(0 4px 16px rgba(255,176,46,0.3));
 }
 
-.live-header-status {
+.header-center {
+  position: absolute;
+  left: 50%;
+  top: clamp(10px,1.8vh,20px);
+  transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 8px;
 }
 
 .counter-badge {
@@ -575,14 +588,15 @@ form.addq select:focus {
 .question-stage {
   width: 100%;
   max-width: min(1500px, 92vw);
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: clamp(16px, 3.5vh, 34px);
   position: relative;
   z-index: 2;
-  height: 100%;
-  justify-content: center;
+  overflow: auto;
 }
 
 /* ─── Idle state / מסך המתנה ─────────────────────────────── */
@@ -658,8 +672,9 @@ form.addq select:focus {
 
 .survey-badge {
   display: block;
-  height: clamp(48px, 8vh, 84px);
+  height: clamp(64px, 10.5vh, 108px);
   width: auto;
+  margin-top: clamp(10px, 2vh, 26px);
   filter: drop-shadow(0 6px 20px rgba(0,0,0,0.5));
   animation: scaleIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
 }
@@ -711,6 +726,12 @@ form.addq select:focus {
 }
 
 .btn-begin-answer img { height: clamp(130px, 21vh, 240px); }
+
+/* הכפתורים בסרגל הבקרה התחתון (התחל/סגור/השהה/סיים) - קטנים משמעותית
+   מיתר כפתורי-האייקון (למשל "הצג מובילים" לא מושפע, כי יש לו כלל נפרד) */
+.control-bar .btn-icon img {
+  height: clamp(92px, 13vh, 148px);
+}
 
 /* ─── חצי ניווט (שאלה קודמת/הבאה) ────────────────────────── */
 
@@ -942,11 +963,11 @@ form.addq select:focus {
 /* ─── Toast stack ────────────────────────────────────────── */
 
 .toast-stack {
-  position: fixed;
-  left: 3vw;
-  right: 3vw;
-  top: 62vh;
-  bottom: 210px;
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  top: 60%;
+  bottom: 2%;
   z-index: 800;
   pointer-events: none;
   overflow: hidden;
@@ -956,15 +977,15 @@ form.addq select:focus {
   position: absolute;
   background: rgba(36,24,18,0.92);
   border: 1.5px solid var(--gold);
-  border-radius: 16px;
-  padding: 16px 32px;
-  font-family: var(--font-display);
-  font-size: clamp(22px, 3.2vw, 38px);
-  font-weight: 800;
+  border-radius: 12px;
+  padding: 11px 20px;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.7vw, 19px);
+  font-weight: 700;
   color: var(--text);
-  box-shadow: 0 10px 36px rgba(0,0,0,0.55), 0 0 30px rgba(255,176,46,0.2);
+  box-shadow: 0 8px 26px rgba(0,0,0,0.5);
   opacity: 0;
-  transform: scale(0.85);
+  transform: scale(0.9);
   transition: opacity 0.35s ease, transform 0.35s ease;
   direction: rtl;
   white-space: nowrap;
@@ -978,8 +999,8 @@ form.addq select:focus {
 
 .btn-top3 {
   position: fixed;
-  bottom: 230px;
-  left: 70px;
+  bottom: 18px;
+  left: 18px;
   z-index: 850;
 }
 .btn-top3 img { height: clamp(110px, 16vh, 180px); }
@@ -1062,6 +1083,68 @@ form.addq select:focus {
     radial-gradient(2px 2px at 92% 60%, rgba(255,215,106,0.6), transparent);
   pointer-events: none;
   opacity: 0.9;
+}
+
+/* ─── כרטיס "המובילים" - האלמנט הכי דומיננטי במסך ────────── */
+
+.leaders-card {
+  position: relative;
+  width: min(90vw, 62vh, 640px);
+  animation: scaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+  /* יחידת בסיס לכל הטקסטים בתוך הכרטיס - כך שהם גדלים/קטנים יחד עם הכרטיס */
+  font-size: clamp(15px, 2.3vw, 23px);
+}
+
+.leaders-card-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 30px 70px rgba(0,0,0,0.65));
+}
+
+.leaders-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* מיקום מדויק לפי הצילום של הכרטיס עצמו (848x1264) - בתוך הפס הכהה, לא על המטבע */
+.leaders-row-1 { top: 39.5%; transform: translateY(-50%); }
+.leaders-row-2 { top: 57.4%; transform: translateY(-50%); }
+.leaders-row-3 { top: 77.3%; transform: translateY(-50%); }
+
+.leaders-info {
+  position: absolute;
+  right: 29%;
+  width: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1em;
+}
+
+.leaders-name {
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 1.55em;
+  color: var(--gold-light);
+  text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.15;
+}
+
+.leaders-score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1em;
+  color: var(--text);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  line-height: 1.1;
 }
 
 .top3-title {
@@ -1185,10 +1268,9 @@ form.addq select:focus {
 /* ─── Control bar ────────────────────────────────────────── */
 
 .control-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
   z-index: 700;
   display: flex;
   align-items: center;
@@ -1220,57 +1302,81 @@ form.addq select:focus {
   position: fixed;
   inset: 0;
   z-index: 2100;
-  background:
-    radial-gradient(ellipse 65% 45% at 50% 15%, rgba(255,176,46,0.16) 0%, transparent 65%),
-    rgba(6,3,3,0.65);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  overflow-y: auto;
-}
-
-.final-panel {
-  position: relative;
-  background: linear-gradient(165deg, #2a1d14, #1c1310);
-  border: 2px solid var(--gold);
-  border-radius: 28px;
-  padding: 48px 56px 40px;
-  min-width: 440px;
-  max-width: 620px;
-  width: 90%;
-  box-shadow: 0 0 0 1px rgba(255,215,106,0.22), 0 0 120px rgba(255,176,46,0.22), 0 60px 100px rgba(0,0,0,0.75);
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  align-items: center;
-  animation: scaleIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both;
+  background: #000;
+  display: block;
   overflow: hidden;
 }
-.final-panel::before {
-  content: '';
+
+.winners-stage {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(2px 2px at 12% 18%, rgba(255,215,106,0.8), transparent),
-    radial-gradient(2px 2px at 88% 22%, rgba(255,215,106,0.7), transparent),
-    radial-gradient(1.5px 1.5px at 75% 78%, rgba(255,215,106,0.6), transparent),
-    radial-gradient(1.5px 1.5px at 20% 82%, rgba(255,215,106,0.6), transparent),
-    radial-gradient(2px 2px at 95% 55%, rgba(255,215,106,0.6), transparent),
-    radial-gradient(1.5px 1.5px at 5% 50%, rgba(255,215,106,0.55), transparent);
-  pointer-events: none;
-  opacity: 0.9;
-}
-.final-panel > * {
-  position: relative;
-  z-index: 1;
+  width: 100%;
+  height: 100%;
 }
 
-.final-badge {
-  height: clamp(64px, 10vh, 100px);
-  width: auto;
-  filter: drop-shadow(0 6px 24px rgba(0,0,0,0.5));
-  animation: scaleIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+.winners-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* מיקום הפודיומים - שלושת השורות ממוקמות באחוזים ביחס לוידאו עצמו.
+   הרוחבי (left/width) מדויק; האנכי (top) הוזז ~10% למטה כדי להיכנס
+   לתוך השלטים בתחתית הבמה (ולא לרחף מעל הפודיומים). */
+.winners-row {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  line-height: 1.15;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.winners-row.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.winners-row-1 { top: 60%; left: 38%; width: 24%; }   /* פודיום מרכזי - מקום ראשון */
+.winners-row-2 { top: 68%; left: 8%;  width: 24%; }   /* פודיום שמאלי - מקום שני */
+.winners-row-3 { top: 68%; left: 68%; width: 24%; }   /* פודיום ימני - מקום שלישי */
+
+.winners-name {
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: clamp(14px, 2.1vw, 24px);
+  color: var(--gold-light);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.winners-score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(12px, 1.7vw, 19px);
+  color: var(--text);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.85);
+}
+
+.winners-controls {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(10,5,4,0.55);
+  padding: 10px 20px;
+  border-radius: 40px;
 }
 
 /* ─── נקודות סטטוס (במקום אימוג'ים) ──────────────────────── */
