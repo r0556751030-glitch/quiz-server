@@ -466,7 +466,7 @@ async function loadQuestions() {
       .join(' · ');
     row.innerHTML = `
       <div class="qmain">
-        <div class="t">${q.order}. ${isSurvey ? '📊 ' : ''}${q.text}</div>
+        <div class="t">${q.order}. ${isSurvey ? ' ' : ''}${q.text}</div>
         <div class="o">${optLine} · ${q.answerWindowSeconds} שנ'</div>
       </div>
       <button class="btn-mini" data-up="${q._id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
