@@ -215,13 +215,24 @@
     </div>
 
     <div class="final-overlay" id="finalOverlay" hidden>
-      <video class="overlay-bg-video" autoplay muted loop playsinline>
-        <source src="/videos/start.mp4" type="video/mp4">
-      </video>
-      <div class="final-panel">
-        <img class="final-badge" src="/images/badge-game-over.png" alt="המשחק הסתיים">
-        <h2 class="top3-title">התוצאות הסופיות</h2>
-        <div id="finalTop3"></div>
+      <div class="winners-stage">
+        <video id="winnersVideo" class="winners-video" muted playsinline>
+          <source src="/videos/v-leaders.mp4" type="video/mp4">
+        </video>
+        <div class="winners-row winners-row-1">
+          <span class="winners-name" id="winnerName1"></span>
+          <span class="winners-score" id="winnerScore1"></span>
+        </div>
+        <div class="winners-row winners-row-2">
+          <span class="winners-name" id="winnerName2"></span>
+          <span class="winners-score" id="winnerScore2"></span>
+        </div>
+        <div class="winners-row winners-row-3">
+          <span class="winners-name" id="winnerName3"></span>
+          <span class="winners-score" id="winnerScore3"></span>
+        </div>
+      </div>
+      <div class="winners-controls">
         <button class="btn-mini" id="toggleFullResults">הצג טבלה מלאה</button>
         <table class="data-table final-full-table" id="finalFullTable" hidden>
           <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>

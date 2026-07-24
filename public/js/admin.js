@@ -278,16 +278,11 @@ function ensureBackToGamesButton() {
 }
 
 function showFinalResults(results) {
-  const top3 = results.slice(0, 3);
-
-  document.getElementById('finalTop3').innerHTML = top3.length
-    ? top3.map((p, i) => `
-        <div class="top3-row rank-${i + 1}" style="animation-delay:${i * 0.25}s">
-          <span class="top3-medal">${i + 1}</span>
-          <span class="top3-name">${p.name || p.phone}</span>
-          <span class="top3-score">${p.score} נק'</span>
-        </div>`).join('')
-    : '<div class="muted">לא נאספו תוצאות במשחק הזה</div>';
+  for (let i = 0; i < 3; i++) {
+    const p = results[i];
+    document.getElementById('winnerName' + (i + 1)).textContent = p ? (p.name || p.phone) : '';
+    document.getElementById('winnerScore' + (i + 1)).textContent = p ? p.score + ' נק\'' : '';
+  }
 
   document.querySelector('#finalFullTable tbody').innerHTML =
     results.map((p) => `
@@ -304,6 +299,12 @@ function showFinalResults(results) {
   document.getElementById('toggleFullResults').textContent = 'הצג טבלה מלאה';
   document.getElementById('finalOverlay').hidden = false;
   ensureBackToGamesButton();
+
+  // מפעיל את סרטון הפודיום מההתחלה בכל סיום משחק (בלי לולאה - בסיום
+  // הריצה הוא פשוט נעצר על הפריים האחרון ונשאר סטטי, כי אין לו loop)
+  const video = document.getElementById('winnersVideo');
+  video.currentTime = 0;
+  video.play().catch(() => {});
 }
 
 document.getElementById('toggleFullResults').addEventListener('click', () => {
@@ -466,7 +467,7 @@ async function loadQuestions() {
       .join(' · ');
     row.innerHTML = `
       <div class="qmain">
-        <div class="t">${q.order}. ${isSurvey ? ' ' : ''}${q.text}</div>
+        <div class="t">${q.order}. ${isSurvey ? '📊 ' : ''}${q.text}</div>
         <div class="o">${optLine} · ${q.answerWindowSeconds} שנ'</div>
       </div>
       <button class="btn-mini" data-up="${q._id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
