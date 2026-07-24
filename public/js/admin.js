@@ -47,15 +47,12 @@ checkAuth();
 // ===================================================================
 // מונה מחוברים
 // ===================================================================
-let lastJoinedTimer = null;
 socket.on('playerConnected', (p) => {
   activeCallIds.add(p.callId);
   updateConnectedCount();
   const lastJoined = document.getElementById('lastJoined');
   document.getElementById('lastJoinedName').textContent = p.name || p.phone || '';
   lastJoined.hidden = false;
-  if (lastJoinedTimer) clearTimeout(lastJoinedTimer);
-  lastJoinedTimer = setTimeout(() => { lastJoined.hidden = true; }, 1000);
 });
 socket.on('playerDisconnected', (p) => { activeCallIds.delete(p.callId); updateConnectedCount(); });
 function updateConnectedCount() {
@@ -278,11 +275,16 @@ function ensureBackToGamesButton() {
 }
 
 function showFinalResults(results) {
-  for (let i = 0; i < 3; i++) {
-    const p = results[i];
-    document.getElementById('winnerName' + (i + 1)).textContent = p ? (p.name || p.phone) : '';
-    document.getElementById('winnerScore' + (i + 1)).textContent = p ? p.score + ' נק\'' : '';
-  }
+  const top3 = results.slice(0, 3);
+
+  document.getElementById('finalTop3').innerHTML = top3.length
+    ? top3.map((p, i) => `
+        <div class="top3-row rank-${i + 1}" style="animation-delay:${i * 0.25}s">
+          <span class="top3-medal">${i + 1}</span>
+          <span class="top3-name">${p.name || p.phone}</span>
+          <span class="top3-score">${p.score} נק'</span>
+        </div>`).join('')
+    : '<div class="muted">לא נאספו תוצאות במשחק הזה</div>';
 
   document.querySelector('#finalFullTable tbody').innerHTML =
     results.map((p) => `
@@ -299,12 +301,6 @@ function showFinalResults(results) {
   document.getElementById('toggleFullResults').textContent = 'הצג טבלה מלאה';
   document.getElementById('finalOverlay').hidden = false;
   ensureBackToGamesButton();
-
-  // מפעיל את סרטון הפודיום מההתחלה בכל סיום משחק (בלי לולאה - בסיום
-  // הריצה הוא פשוט נעצר על הפריים האחרון ונשאר סטטי, כי אין לו loop)
-  const video = document.getElementById('winnersVideo');
-  video.currentTime = 0;
-  video.play().catch(() => {});
 }
 
 document.getElementById('toggleFullResults').addEventListener('click', () => {
@@ -398,11 +394,16 @@ document.getElementById('top3Btn').addEventListener('click', async () => {
   const players = await res.json();
   const top3 = players.slice(0, 3);
 
-  for (let i = 0; i < 3; i++) {
-    const p = top3[i];
-    document.getElementById('leaderName' + (i + 1)).textContent = p ? (p.name || p.phone) : '—';
-    document.getElementById('leaderScore' + (i + 1)).textContent = p ? p.score + ' נק\'' : '';
-  }
+  document.getElementById('top3Panel').innerHTML =
+    '<h2 class="top3-title">המובילים כרגע</h2>' +
+    (top3.length
+      ? top3.map((p, i) => `
+          <div class="top3-row rank-${i + 1}">
+            <span class="top3-medal">${i + 1}</span>
+            <span class="top3-name">${p.name || p.phone}</span>
+            <span class="top3-score">${p.score} נק'</span>
+          </div>`).join('')
+      : '<div class="muted">אין עדיין נתונים</div>');
 
   overlay.hidden = false;
 });

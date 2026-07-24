@@ -128,15 +128,14 @@
 
     <div class="live-header">
       <img class="crest" src="/images/logo-trophy.png" alt="קעמפ-קליק">
-      <div class="header-center">
+      <div class="live-header-status">
         <div class="counter-badge"><span id="connectedCount">0</span> מחוברים</div>
         <div class="last-joined" id="lastJoined" hidden>הצטרפ/ה: <span id="lastJoinedName"></span></div>
+        <span class="conn-dot off" id="connDot"></span>
       </div>
-      <span class="conn-dot off" id="connDot"></span>
     </div>
 
-    <div class="stage-middle">
-      <div class="question-stage" id="questionStage">
+    <div class="question-stage" id="questionStage">
 
       <div class="idle-state" id="idleState">
         <div class="call-card">
@@ -178,10 +177,9 @@
         <div class="results-bars" id="resultsBars"></div>
       </div>
 
-      </div>
-
-      <div class="toast-stack" id="toastStack"></div>
     </div>
+
+    <div class="toast-stack" id="toastStack"></div>
 
     <button class="btn-icon btn-top3" id="top3Btn" title="הצג מובילים">
       <img src="/images/icon-show-leaders.png" alt="הצג מובילים">
@@ -191,48 +189,17 @@
         <source src="/videos/start.mp4" type="video/mp4">
       </video>
       <button class="overlay-close-x" id="top3CloseX" aria-label="סגירה" title="חזרה למשחק">✕</button>
-      <div class="leaders-card" id="top3Panel">
-        <img class="leaders-card-img" src="/images/leaders.png" alt="המובילים">
-        <div class="leaders-row leaders-row-1">
-          <div class="leaders-info">
-            <span class="leaders-name" id="leaderName1"></span>
-            <span class="leaders-score" id="leaderScore1"></span>
-          </div>
-        </div>
-        <div class="leaders-row leaders-row-2">
-          <div class="leaders-info">
-            <span class="leaders-name" id="leaderName2"></span>
-            <span class="leaders-score" id="leaderScore2"></span>
-          </div>
-        </div>
-        <div class="leaders-row leaders-row-3">
-          <div class="leaders-info">
-            <span class="leaders-name" id="leaderName3"></span>
-            <span class="leaders-score" id="leaderScore3"></span>
-          </div>
-        </div>
-      </div>
+      <div class="top3-panel" id="top3Panel"></div>
     </div>
 
     <div class="final-overlay" id="finalOverlay" hidden>
-      <div class="winners-stage">
-        <video id="winnersVideo" class="winners-video" muted playsinline>
-          <source src="/videos/v-leaders.mp4" type="video/mp4">
-        </video>
-        <div class="winners-row winners-row-1">
-          <span class="winners-name" id="winnerName1"></span>
-          <span class="winners-score" id="winnerScore1"></span>
-        </div>
-        <div class="winners-row winners-row-2">
-          <span class="winners-name" id="winnerName2"></span>
-          <span class="winners-score" id="winnerScore2"></span>
-        </div>
-        <div class="winners-row winners-row-3">
-          <span class="winners-name" id="winnerName3"></span>
-          <span class="winners-score" id="winnerScore3"></span>
-        </div>
-      </div>
-      <div class="winners-controls">
+      <video class="overlay-bg-video" autoplay muted loop playsinline>
+        <source src="/videos/start.mp4" type="video/mp4">
+      </video>
+      <div class="final-panel">
+        <img class="final-badge" src="/images/badge-game-over.png" alt="המשחק הסתיים">
+        <h2 class="top3-title">התוצאות הסופיות</h2>
+        <div id="finalTop3"></div>
         <button class="btn-mini" id="toggleFullResults">הצג טבלה מלאה</button>
         <table class="data-table final-full-table" id="finalFullTable" hidden>
           <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>
@@ -244,24 +211,24 @@
 
     <div class="control-bar">
       <button class="btn-nav-arrow" id="prevQBtn" title="שאלה קודמת" aria-label="שאלה קודמת">
-        <svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg>
       </button>
 
       <button class="btn-icon" id="startBtn" title="התחל משחק">
         <img src="/images/icon-start.png" alt="התחל משחק">
       </button>
-      <button class="btn-icon" id="closeBtn" title="סגור" hidden>
-        <img src="/images/icon-close.png" alt="סגור">
-      </button>
       <button class="btn-icon" id="pauseBtn" title="השהה" hidden>
         <img src="/images/icon-pause.png" alt="השהה / המשך">
+      </button>
+      <button class="btn-icon" id="closeBtn" title="סגור" hidden>
+        <img src="/images/icon-close.png" alt="סגור">
       </button>
       <button class="btn-icon btn-end" id="endGameBtn" title="סיים משחק">
         <img src="/images/icon-finish-arrow.png" alt="סיים משחק">
       </button>
 
       <button class="btn-nav-arrow" id="nextQBtn" title="שאלה הבאה" aria-label="שאלה הבאה">
-        <svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg>
       </button>
     </div>
 
