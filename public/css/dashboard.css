@@ -1339,9 +1339,9 @@ form.addq select:focus {
   opacity: 1;
   transform: translateY(0);
 }
-.winners-row-1 { top: 60%; left: 38%; width: 24%; }   /* פודיום מרכזי - מקום ראשון */
-.winners-row-2 { top: 68%; left: 8%;  width: 24%; }   /* פודיום שמאלי - מקום שני */
-.winners-row-3 { top: 68%; left: 68%; width: 24%; }   /* פודיום ימני - מקום שלישי */
+.winners-row-1 { top: 63.1%; left: 38%; width: 24%; }   /* פודיום מרכזי - מקום ראשון */
+.winners-row-2 { top: 71.1%; left: 8%;  width: 24%; }   /* פודיום שמאלי - מקום שני */
+.winners-row-3 { top: 71.1%; left: 68%; width: 24%; }   /* פודיום ימני - מקום שלישי */
 
 .winners-name {
   font-family: var(--font-body);
