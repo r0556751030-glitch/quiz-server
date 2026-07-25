@@ -1296,7 +1296,7 @@ form.addq select:focus {
   font-weight: 400;
 }
 
-* ─── מסך תוצאות סופיות ──────────────────────────────────── */
+/* ─── מסך תוצאות סופיות ──────────────────────────────────── */
 
 .final-overlay {
   position: fixed;
@@ -1339,13 +1339,13 @@ form.addq select:focus {
   transform: translateY(0);
 }
 
-.winners-name-1 { top: 82%;   left: 38%; width: 24%; }   /* פודיום מרכזי - שם, מקום ראשון */
-.winners-name-2 { top: 85.3%; left: 5%;  width: 24%; }   /* פודיום שמאלי - שם, מקום שני */
-.winners-name-3 { top: 85.3%; left: 71%; width: 24%; }   /* פודיום ימני - שם, מקום שלישי */
+.winners-name-1 { top: 80%; left: 38%; width: 24%; }   /* פודיום מרכזי - שם, מקום ראשון */
+.winners-name-2 { top: 83%; left: 8%;  width: 24%; }   /* פודיום שמאלי - שם, מקום שני */
+.winners-name-3 { top: 83%; left: 68%; width: 24%; }   /* פודיום ימני - שם, מקום שלישי */
 
-.winners-score-1 { top: 86.5%; left: 38%; width: 24%; }   /* פודיום מרכזי - ניקוד (שלט תחתון) */
-.winners-score-2 { top: 91%;   left: 5%;  width: 24%; }   /* פודיום שמאלי - ניקוד (שלט תחתון) */
-.winners-score-3 { top: 91%;   left: 71%; width: 24%; }   /* פודיום ימני - ניקוד (שלט תחתון) */
+.winners-score-1 { top: 89%; left: 38%; width: 24%; }   /* פודיום מרכזי - ניקוד (שלט תחתון) */
+.winners-score-2 { top: 91%; left: 8%;  width: 24%; }   /* פודיום שמאלי - ניקוד (שלט תחתון) */
+.winners-score-3 { top: 91%; left: 68%; width: 24%; }   /* פודיום ימני - ניקוד (שלט תחתון) */
 
 .winners-name {
   font-family: var(--font-body);
