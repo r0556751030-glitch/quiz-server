@@ -1339,14 +1339,13 @@ form.addq select:focus {
   opacity: 1;
   transform: translateY(0);
 }
-.winners-row-1 { top: 63.1%; left: 38%; width: 24%; }   /* פודיום מרכזי - מקום ראשון */
-.winners-row-2 { top: 71.1%; left: 8%;  width: 24%; }   /* פודיום שמאלי - מקום שני */
-.winners-row-3 { top: 71.1%; left: 68%; width: 24%; }   /* פודיום ימני - מקום שלישי */
-
+.winners-row-1 { top: 72.1%; left: 38%; width: 24%; }   /* פודיום מרכזי - מקום ראשון */
+.winners-row-2 { top: 78.1%; left: 8%;  width: 24%; }   /* פודיום שמאלי - מקום שני */
+.winners-row-3 { top: 78.1%; left: 68%; width: 24%; }   /* פודיום ימני - מקום שלישי */
 .winners-name {
   font-family: var(--font-body);
   font-weight: 800;
-  font-size: clamp(14px, 2.1vw, 24px);
+  font-size: clamp(17px, 2.6vw, 30px);   /* היה clamp(14px, 2.1vw, 24px) */
   color: var(--gold-light);
   text-shadow: 0 2px 10px rgba(0,0,0,0.85);
   white-space: nowrap;
@@ -1358,25 +1357,26 @@ form.addq select:focus {
 .winners-score {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(12px, 1.7vw, 19px);
+    font-size: clamp(15px, 2.1vw, 23px);   /* היה clamp(12px, 1.7vw, 19px) */
+
   color: var(--text);
   text-shadow: 0 2px 8px rgba(0,0,0,0.85);
 }
 
+
 .winners-controls {
   position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 20px;
+  left: 20px;
   z-index: 10;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  background: rgba(10,5,4,0.55);
-  padding: 10px 20px;
-  border-radius: 40px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-width: 240px;
+  background: rgba(10,5,4,0.6);
+  padding: 12px 16px;
+  border-radius: 16px;
 }
 
 /* ─── נקודות סטטוס (במקום אימוג'ים) ──────────────────────── */
