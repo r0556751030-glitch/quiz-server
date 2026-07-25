@@ -288,7 +288,8 @@ const WINNERS_VIDEO_SAFE_END = 15.85;
 
 function resetWinnersReveal() {
   for (let i = 1; i <= 3; i++) {
-    document.getElementById('winnerName' + i).closest('.winners-row').classList.remove('show');
+    document.getElementById('winnerName' + i).classList.remove('show');
+    document.getElementById('winnerScore' + i).classList.remove('show');
   }
 }
 
@@ -302,7 +303,8 @@ function attachWinnersVideoHandlers() {
     for (const rank of [3, 2, 1]) {
       if (!revealed.has(rank) && video.currentTime >= WINNERS_REVEAL_TIMES[rank]) {
         revealed.add(rank);
-        document.getElementById('winnerName' + rank).closest('.winners-row').classList.add('show');
+        document.getElementById('winnerName' + rank).classList.add('show');
+        document.getElementById('winnerScore' + rank).classList.add('show');
       }
     }
     if (video.currentTime >= WINNERS_VIDEO_SAFE_END) {
@@ -331,8 +333,7 @@ function showFinalResults(results) {
       </tr>
     `).join('') || '<tr><td colspan="5" class="muted">אין נתונים</td></tr>';
 
-  document.getElementById('finalFullTable').hidden = true;
-  document.getElementById('toggleFullResults').textContent = 'הצג טבלה מלאה';
+  document.getElementById('fullResultsOverlay').hidden = true;
   document.getElementById('finalOverlay').hidden = false;
   ensureBackToGamesButton();
 
@@ -346,10 +347,11 @@ function showFinalResults(results) {
 }
 
 document.getElementById('toggleFullResults').addEventListener('click', () => {
-  const table = document.getElementById('finalFullTable');
-  table.hidden = !table.hidden;
-  document.getElementById('toggleFullResults').textContent =
-    table.hidden ? 'הצג טבלה מלאה' : 'הסתר טבלה';
+  document.getElementById('fullResultsOverlay').hidden = false;
+});
+
+document.getElementById('closeFullResultsX').addEventListener('click', () => {
+  document.getElementById('fullResultsOverlay').hidden = true;
 });
 
 document.getElementById('closeFinalOverlay').addEventListener('click', () => {

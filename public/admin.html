@@ -219,26 +219,31 @@
         <video id="winnersVideo" class="winners-video" muted playsinline>
           <source src="/videos/v-leaders.mp4" type="video/mp4">
         </video>
-        <div class="winners-row winners-row-1">
-          <span class="winners-name" id="winnerName1"></span>
-          <span class="winners-score" id="winnerScore1"></span>
-        </div>
-        <div class="winners-row winners-row-2">
-          <span class="winners-name" id="winnerName2"></span>
-          <span class="winners-score" id="winnerScore2"></span>
-        </div>
-        <div class="winners-row winners-row-3">
-          <span class="winners-name" id="winnerName3"></span>
-          <span class="winners-score" id="winnerScore3"></span>
-        </div>
+        <span class="winners-name winners-name-1" id="winnerName1"></span>
+        <span class="winners-score winners-score-1" id="winnerScore1"></span>
+        <span class="winners-name winners-name-2" id="winnerName2"></span>
+        <span class="winners-score winners-score-2" id="winnerScore2"></span>
+        <span class="winners-name winners-name-3" id="winnerName3"></span>
+        <span class="winners-score winners-score-3" id="winnerScore3"></span>
       </div>
       <div class="winners-controls">
         <button class="btn-mini" id="toggleFullResults">הצג טבלה מלאה</button>
-        <table class="data-table final-full-table" id="finalFullTable" hidden>
-          <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>
-          <tbody></tbody>
-        </table>
         <button class="btn-mini btn-block" id="closeFinalOverlay">סגירה</button>
+      </div>
+    </div>
+
+    <div class="full-results-overlay" id="fullResultsOverlay" hidden>
+      <div class="full-results-panel">
+        <div class="full-results-header">
+          <h2>התוצאות המלאות</h2>
+          <button class="overlay-close-x" id="closeFullResultsX" aria-label="סגירה" title="סגירה">✕</button>
+        </div>
+        <div class="full-results-scroll">
+          <table class="data-table final-full-table" id="finalFullTable">
+            <thead><tr><th>#</th><th>כינוי</th><th>ניקוד</th><th>תשובות נכונות</th><th>זמן ממוצע</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 

@@ -1318,37 +1318,39 @@ form.addq select:focus {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit:fill;
+  object-fit: cover;
 }
 
-/* מיקום הפודיומים - שלושת השורות ממוקמות באחוזים ביחס לוידאו עצמו.
-   הרוחבי (left/width) מדויק; האנכי (top) הוזז ~10% למטה כדי להיכנס
-   לתוך השלטים בתחתית הבמה (ולא לרחף מעל הפודיומים). */
-.winners-row {
+/* מיקום הפודיומים - כל שם וכל ניקוד ממוקמים בנפרד (שני "שלטים" נפרדים
+   על כל פודיום: השם בשלט העליון, הניקוד בשלט התחתון מתחתיו). האחוזים
+   של השם עודכנו לפי בדיקה בפועל; מיקום הניקוד הוא הערכה שסביר שתצטרך
+   כיוונון קטן נוסף מולך. */
+.winners-name,
+.winners-score {
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   text-align: center;
-  line-height: 1.15;
   opacity: 0;
   transform: translateY(10px);
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
-.winners-row.show {
+.winners-name.show,
+.winners-score.show {
   opacity: 1;
   transform: translateY(0);
 }
-.winners-row-1 {
-  line-height: 5%;
-   top: 78%; left: 38%; width: 24%;
-   }   /* פודיום מרכזי - מקום ראשון */
-.winners-row-2 { top: 82%; left: 8%;  width: 24%; }   /* פודיום שמאלי - מקום שני */
-.winners-row-3 { top: 82%; left: 68%; width: 24%; }   /* פודיום ימני - מקום שלישי */
+
+.winners-name-1 { top: 78%; left: 38%; width: 24%; }   /* פודיום מרכזי - שם, מקום ראשון */
+.winners-name-2 { top: 82%; left: 8%;  width: 24%; }   /* פודיום שמאלי - שם, מקום שני */
+.winners-name-3 { top: 82%; left: 68%; width: 24%; }   /* פודיום ימני - שם, מקום שלישי */
+
+.winners-score-1 { top: 84%; left: 38%; width: 24%; }   /* פודיום מרכזי - ניקוד (שלט תחתון) */
+.winners-score-2 { top: 88%; left: 8%;  width: 24%; }   /* פודיום שמאלי - ניקוד (שלט תחתון) */
+.winners-score-3 { top: 88%; left: 68%; width: 24%; }   /* פודיום ימני - ניקוד (שלט תחתון) */
+
 .winners-name {
   font-family: var(--font-body);
   font-weight: 800;
-  font-size: clamp(17px, 2.6vw, 30px);   /* היה clamp(14px, 2.1vw, 24px) */
+  font-size: clamp(17px, 2.6vw, 30px);
   color: var(--gold-light);
   text-shadow: 0 2px 10px rgba(0,0,0,0.85);
   white-space: nowrap;
@@ -1360,12 +1362,10 @@ form.addq select:focus {
 .winners-score {
   font-family: var(--font-display);
   font-weight: 800;
-    font-size: clamp(15px, 2.1vw, 23px);   /* היה clamp(12px, 1.7vw, 19px) */
-
+  font-size: clamp(15px, 2.1vw, 23px);
   color: var(--text);
   text-shadow: 0 2px 8px rgba(0,0,0,0.85);
 }
-
 
 .winners-controls {
   position: absolute;
@@ -1393,28 +1393,90 @@ form.addq select:focus {
 .dot-on  { background: var(--stage-emerald); box-shadow: 0 0 8px 2px rgba(55,168,116,0.6); }
 .dot-off { background: rgba(232,216,205,0.35); }
 
-#finalTop3 {
+/* ─── טבלת התוצאות המלאה - מסך מלא, ברור וקריא ───────────── */
+
+.full-results-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  background: rgba(8,5,4,0.97);
   display: flex;
-  flex-direction: column;
-  gap: 14px;
-  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 3vh, 40px);
 }
 
-#finalTop3 .top3-row {
-  opacity: 0;
-  animation: fadeSlideDown 0.5s ease both;
+.full-results-panel {
+  width: 100%;
+  max-width: 900px;
+  height: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(165deg, #241812, #1c1310);
+  border: 2px solid var(--gold);
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px rgba(255,215,106,0.2), 0 40px 90px rgba(0,0,0,0.7);
+  overflow: hidden;
+}
+
+.full-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 26px;
+  border-bottom: 1px solid rgba(255,176,46,0.25);
+  flex: 0 0 auto;
+}
+.full-results-header h2 {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 900;
+  color: var(--gold-light);
+  margin: 0;
+}
+.full-results-header .overlay-close-x {
+  position: static;
+}
+
+.full-results-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 26px 26px;
 }
 
 .final-full-table {
   width: 100%;
-  margin-top: 4px;
-  max-height: 300px;
-  overflow-y: auto;
-  display: block;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.7vw, 19px);
 }
-.final-full-table thead,
-.final-full-table tbody {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
+.final-full-table thead th {
+  position: sticky;
+  top: 0;
+  background: #1c1310;
+  color: var(--gold-light);
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-align: center;
+  padding: 12px 10px;
+  border-bottom: 2px solid var(--gold);
+  z-index: 1;
+}
+.final-full-table tbody td {
+  text-align: center;
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: var(--text);
+}
+.final-full-table tbody td.rank {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--gold-light);
+}
+.final-full-table tbody tr:nth-child(even) td {
+  background: rgba(255,176,46,0.05);
+}
+.final-full-table tbody tr:hover td {
+  background: rgba(255,176,46,0.14);
 }
