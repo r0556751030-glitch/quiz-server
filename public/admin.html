@@ -74,7 +74,10 @@
           <label>זמן מענה (שניות)</label>
           <input type="number" id="qSeconds" value="15" min="3" max="120">
 
-          <button type="submit" class="btn-mini btn-block">הוספת שאלה</button>
+          <button type="submit" class="btn-mini btn-block" id="submitQBtn">הוספת שאלה</button>
+          <div class="edit-actions-row" id="editActionsRow" hidden>
+            <button type="button" class="btn-mini" id="cancelEditBtn">ביטול עריכה</button>
+          </div>
         </form>
       </section>
 

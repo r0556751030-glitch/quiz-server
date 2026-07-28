@@ -4,6 +4,13 @@ let questionsCache = [];
 let countdownInterval = null;
 let currentRole = null;
 let appInitialized = false;
+let editingQuestionId = null; // מזהה השאלה שנמצאת כרגע בעריכה, או null במצב "הוספת שאלה"
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
@@ -184,7 +191,47 @@ function renderLiveOptions(options) {
     d.textContent = `${i + 1}. ${o}`;
     opts.appendChild(d);
   });
+  fitQuestionStage();
 }
+
+// ===================================================================
+// התאמת גודל הבמה - מקטין את כל התוכן (טקסט השאלה, כרטיסי התשובות,
+// תג הסקר, הטיימר) יחד באותו יחס בדיוק, כדי שהכל ייכנס בגובה הפנוי
+// בלי גלגלת גלילה אנכית. משתמש במשתנה CSS ‎--fit-scale שמוגדר על
+// .question-stage ומוכפל בתוך clamp() של כל האלמנטים הרלוונטיים -
+// כך שכל הדיבים על אותו מסך מוקטנים באותה מידה בדיוק (לא בנפרד זה מזה).
+function fitQuestionStage() {
+  const stage = document.getElementById('questionStage');
+  const container = document.querySelector('.stage-middle');
+  if (!stage || !container) return;
+
+  // איפוס לגודל מלא לפני מדידה
+  stage.style.setProperty('--fit-scale', '1');
+
+  requestAnimationFrame(() => {
+    const maxH = container.clientHeight;
+    if (stage.scrollHeight <= maxH) return; // נכנס בשלמותו - אין צורך בהקטנה
+
+    const MIN_SCALE = 0.45;
+    stage.style.setProperty('--fit-scale', MIN_SCALE);
+    if (stage.scrollHeight > maxH) return; // אפילו במינימום לא נכנס - משאירים במינימום
+
+    // חיפוש בינארי אחר הגודל המקסימלי שעדיין נכנס בשלמותו
+    let lo = MIN_SCALE, hi = 1;
+    for (let i = 0; i < 8; i++) {
+      const mid = (lo + hi) / 2;
+      stage.style.setProperty('--fit-scale', mid);
+      if (stage.scrollHeight <= maxH) lo = mid; else hi = mid;
+    }
+    stage.style.setProperty('--fit-scale', lo);
+  });
+}
+
+let fitResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(fitResizeTimer);
+  fitResizeTimer = setTimeout(fitQuestionStage, 150);
+});
 
 function startTimer(seconds, openedAt) {
   if (countdownInterval) clearInterval(countdownInterval);
@@ -247,6 +294,8 @@ socket.on('questionResults', (r) => {
       row.querySelector('.bar-fill').style.width = (r.percentages[i] ?? 0) + '%';
     });
   });
+
+  fitQuestionStage();
 });
 
 socket.on('gamePaused', () => {
@@ -510,10 +559,13 @@ async function loadQuestions() {
         <div class="t">${q.order}. ${isSurvey ? '📊 ' : ''}${q.text}</div>
         <div class="o">${optLine} · ${q.answerWindowSeconds} שנ'</div>
       </div>
-      <button class="btn-mini" data-up="${q._id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
-      <button class="btn-mini" data-down="${q._id}" ${idx === questionsCache.length - 1 ? 'disabled' : ''}>▼</button>
-      <button class="btn-mini" data-open="${q._id}">פתח</button>
-      <button class="btn-mini" data-del="${q._id}">מחק</button>
+      <div class="q-actions">
+        <button class="btn-mini" data-up="${q._id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="btn-mini" data-down="${q._id}" ${idx === questionsCache.length - 1 ? 'disabled' : ''}>▼</button>
+        <button class="btn-mini" data-open="${q._id}">פתח</button>
+        <button class="btn-mini" data-edit="${q._id}">ערוך</button>
+        <button class="btn-mini" data-del="${q._id}">מחק</button>
+      </div>
     `;
     wrap.appendChild(row);
   });
@@ -524,12 +576,65 @@ async function loadQuestions() {
     await authFetch('/admin/open-question/' + b.dataset.open, { method: 'POST' });
     closeDrawer();
   }));
+  wrap.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => startEditQuestion(b.dataset.edit)));
   wrap.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('למחוק את השאלה הזו לצמיתות?')) return;
     await authFetch('/admin/questions/' + b.dataset.del, { method: 'DELETE' });
+    // אם השאלה שנמחקה היא זו שהייתה בעריכה כרגע - יוצאים ממצב עריכה
+    if (editingQuestionId === b.dataset.del) resetEditState(true);
     loadQuestions();
   }));
 }
+
+// ===== כניסה למצב עריכה: ממלא את הטופס בנתוני השאלה הקיימת ומחליף
+// את הפעולה שהשליחה מבצעת מ"יצירה" ל"עדכון" =====
+function startEditQuestion(id) {
+  const q = questionsCache.find((qq) => qq._id === id);
+  if (!q) return;
+
+  editingQuestionId = id;
+
+  document.getElementById('qText').value = q.text;
+  document.getElementById('qSeconds').value = q.answerWindowSeconds;
+
+  document.getElementById('typeKnowledge').checked = !q.isSurvey;
+  document.getElementById('typeSurvey').checked = !!q.isSurvey;
+  document.getElementById('correctAnswerSection').hidden = !!q.isSurvey;
+
+  // תיבת הבחירה תומכת כרגע ב-2 עד 6 אפשרויות; אם לשאלה יש יותר (עד 9 נתמך
+  // במודל/בשרת), נציג את המקסימום הזמין בתיבה כדי לא לאבד אף אפשרות בפועל
+  const selectEl = document.getElementById('optCount');
+  const availableCounts = Array.from(selectEl.options).map((o) => Number(o.value));
+  const maxAvailable = Math.max(...availableCounts);
+  const count = Math.min(Math.max(q.options.length, availableCounts[0]), maxAvailable);
+  selectEl.value = String(count);
+
+  renderOptionInputs(q.options, q.isSurvey ? null : q.correctIndex);
+
+  document.getElementById('addForm').classList.add('editing');
+  document.getElementById('submitQBtn').textContent = 'עדכון שאלה';
+  document.getElementById('editActionsRow').hidden = false;
+
+  document.getElementById('addForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ===== יציאה ממצב עריכה חזרה למצב "הוספת שאלה" =====
+// resetForm=true גם מאפס את שדות הטופס (משמש בביטול עריכה / אחרי מחיקת השאלה הנערכת)
+function resetEditState(resetForm) {
+  editingQuestionId = null;
+  document.getElementById('addForm').classList.remove('editing');
+  document.getElementById('submitQBtn').textContent = 'הוספת שאלה';
+  document.getElementById('editActionsRow').hidden = true;
+
+  if (resetForm) {
+    document.getElementById('addForm').reset();
+    document.getElementById('correctAnswerSection').hidden = false;
+    document.getElementById('typeKnowledge').checked = true;
+    renderOptionInputs();
+  }
+}
+
+document.getElementById('cancelEditBtn').addEventListener('click', () => resetEditState(true));
 
 async function moveQuestion(id, direction) {
   const idx = questionsCache.findIndex((q) => q._id === id);
@@ -545,21 +650,43 @@ async function moveQuestion(id, direction) {
   loadQuestions();
 }
 
-// ===== טופס הוספת שאלה + תמיכה בסקר =====
-function renderOptionInputs() {
+// ===== טופס הוספת/עריכת שאלה + תמיכה בסקר =====
+// prefillOptions/prefillCorrectIndex משמשים רק בכניסה למצב עריכה (startEditQuestion).
+// בכל קריאה רגילה (למשל שינוי כמות האפשרויות) - שומרים את מה שכבר הוקלד בטופס:
+// אם מגדילים כמות, האפשרויות הקיימות נשארות כמו שהן ורק מתווספות שדות ריקים
+// נוספים בסוף; אם מקטינים, רק העודפות בסוף נגזרות.
+function renderOptionInputs(prefillOptions, prefillCorrectIndex) {
   const count = Number(document.getElementById('optCount').value);
   const isSurvey = document.getElementById('typeSurvey').checked;
   const wrap = document.getElementById('optionsWrap');
+
+  const existingValues = prefillOptions
+    || Array.from(wrap.querySelectorAll('.opt-input')).map((i) => i.value);
+
+  const existingChecked = wrap.querySelector('input[name=correctIndex]:checked');
+  let currentCorrectIndex = prefillCorrectIndex != null
+    ? prefillCorrectIndex
+    : (existingChecked ? Number(existingChecked.value) : 0);
+
   wrap.innerHTML = '';
   for (let i = 0; i < count; i++) {
     const row = document.createElement('div');
     row.className = 'opt-row';
+    const value = existingValues[i] || '';
+    const isChecked = i === currentCorrectIndex;
     // radio לתשובה נכונה מוצג רק בשאלת ידע
     row.innerHTML = `
-      ${!isSurvey ? `<input type="radio" name="correctIndex" value="${i}" ${i === 0 ? 'checked' : ''}>` : ''}
-      <input type="text" class="opt-input" placeholder="אפשרות ${i + 1}" required>
+      ${!isSurvey ? `<input type="radio" name="correctIndex" value="${i}" ${isChecked ? 'checked' : ''}>` : ''}
+      <input type="text" class="opt-input" placeholder="אפשרות ${i + 1}" value="${escapeHtml(value)}" required>
     `;
     wrap.appendChild(row);
+  }
+
+  // אם התשובה הנכונה שהייתה מסומנת נמצאת מעבר לכמות האפשרויות החדשה
+  // (הקטנת כמות מתחת לאינדקס שנבחר) - נבחר כברירת מחדל את האפשרות הראשונה
+  if (!isSurvey && currentCorrectIndex >= count) {
+    const first = wrap.querySelector('input[name=correctIndex]');
+    if (first) first.checked = true;
   }
 }
 
@@ -591,17 +718,18 @@ document.getElementById('addForm').addEventListener('submit', async (e) => {
     correctIndex = Number(checked.value);
   }
 
-  const res = await authFetch('/admin/questions', {
-    method: 'POST',
+  const isEditing = !!editingQuestionId;
+  const url = isEditing ? '/admin/questions/' + editingQuestionId : '/admin/questions';
+  const method = isEditing ? 'PATCH' : 'POST';
+
+  const res = await authFetch(url, {
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, options, correctIndex, answerWindowSeconds, isSurvey })
   });
 
   if (res.ok) {
-    e.target.reset();
-    document.getElementById('correctAnswerSection').hidden = false;
-    document.getElementById('typeKnowledge').checked = true;
-    renderOptionInputs();
+    resetEditState(true);
     loadQuestions();
   } else {
     const err = await res.json();
