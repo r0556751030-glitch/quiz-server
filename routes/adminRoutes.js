@@ -428,40 +428,6 @@ router.post('/questions', requireLiveGameOwnership, async (req, res) => {
     }
 });
 
-router.patch('/questions/:id', requireLiveGameOwnership, async (req, res) => {
-    try {
-        const { text, options, answerWindowSeconds } = req.body;
-        const isSurvey = !!req.body.isSurvey;
-        const correctIndex = req.body.correctIndex != null ? Number(req.body.correctIndex) : null;
-
-        if (!text || !Array.isArray(options) || options.length < 2 || options.length > 9) {
-            return res.status(400).json({ error: 'יש למלא טקסט ובין 2 ל-9 אפשרויות' });
-        }
-        if (!isSurvey && (correctIndex === null || correctIndex < 0 || correctIndex >= options.length)) {
-            return res.status(400).json({ error: 'יש לבחור תשובה נכונה תקינה' });
-        }
-
-        const question = await Question.findOneAndUpdate(
-            { _id: req.params.id, game: req.gameId },
-            {
-                text,
-                options,
-                correctIndex: isSurvey ? null : correctIndex,
-                isSurvey,
-                answerWindowSeconds: Number(answerWindowSeconds) || 15
-            },
-            { new: true }
-        );
-
-        if (!question) return res.status(404).json({ error: 'השאלה לא נמצאה' });
-
-        res.json({ success: true, question });
-    } catch (err) {
-        console.error('שגיאה בעדכון שאלה:', err);
-        res.status(500).json({ error: 'שגיאה בעדכון השאלה' });
-    }
-});
-
 router.delete('/questions/:id', requireLiveGameOwnership, async (req, res) => {
     await Question.findOneAndDelete({ _id: req.params.id, game: req.gameId });
     res.json({ success: true });
@@ -591,11 +557,33 @@ router.get('/contacts', async (req, res) => {
 });
 
 router.post('/contacts', requireLiveGameOwnership, async (req, res) => {
-    const { phone, name } = req.body;
-    if (!phone) return res.status(400).json({ error: 'חסר מספר טלפון' });
-    await Contact.findOneAndUpdate({ game: req.gameId, phone }, { name: name || null }, { upsert: true });
-    req.app.get('io').emit('contactUpdated', { phone, name: name || null });
-    res.json({ success: true });
+    try {
+        const { phone, name } = req.body;
+        if (!phone) return res.status(400).json({ error: 'חסר מספר טלפון' });
+
+        try {
+            await Contact.findOneAndUpdate(
+                { game: req.gameId, phone },
+                { game: req.gameId, phone, name: name || null },
+                { upsert: true }
+            );
+        } catch (innerErr) {
+            // סביר שקיים כבר Contact עם אותו טלפון משחק/סשן קודם, ויש אינדקס ייחודי
+            // שלא לוקח בחשבון את המשחק (רק על phone) - מוחקים את הישן ויוצרים חדש
+            if (innerErr.code === 11000) {
+                await Contact.deleteMany({ phone });
+                await Contact.create({ game: req.gameId, phone, name: name || null });
+            } else {
+                throw innerErr;
+            }
+        }
+
+        req.app.get('io').emit('contactUpdated', { phone, name: name || null });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('שגיאה בהוספת איש קשר:', err);
+        res.status(500).json({ error: 'שגיאת שרת: ' + err.message });
+    }
 });
 
 router.delete('/players/:phone', requireLiveGameOwnership, async (req, res) => {
