@@ -60,9 +60,7 @@ function armQuestionTimers(app, question) {
             state.status = 'idle';
             app.get('io').emit('questionClosed', { questionId: question._id });
             await computeAndEmitResults(app, question, capturedOpenedAt);
-            if (state.autoAdvance) {
-                advanceTimer = setTimeout(() => advanceToNext(app, question), 6000);
-            }
+            // הועבר מעבר אוטומטי לשאלה הבאה - המנחה עובר בעצמו דרך חצי הניווט בלבד.
         }
     }, closeDelay);
 }
