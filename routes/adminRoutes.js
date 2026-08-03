@@ -4,70 +4,69 @@ const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const { state, CONFIG } = require('../game/gameState');
-const { requireAuth, requireLiveGameOwnership } = require('../middleware/auth');
+const { getGameState, CONFIG } = require('../game/gameState');
+const { requireAuth, requireGameContext } = require('../middleware/auth');
 
-let closeTimer = null;
-let advanceTimer = null;
-let visualTimer = null;
+function roomName(gameId) {
+    return `game:${gameId}`;
+}
 
-// requireAuth על הכול — כולל routes קריאת מידע
+// requireAuth + requireGameContext על הכול: כל בקשה ל-/admin/* חייבת לציין
+// gameId ספציפי (שלב 4 - כמה משחקים יכולים להיות חיים בו-זמנית, אין יותר
+// "המשחק החי היחיד" גלובלית). requireGameContext בודק בעלות/הרשאה ומגדיר
+// req.gameId + req.gameDoc - גם אם המשחק הזה לא "חי" כרגע בזיכרון (למשל
+// טעינת רשימת שאלות לפני שמפעילים את המשחק).
 router.use(requireAuth);
+router.use(requireGameContext);
 
-// requireLiveGameOwnership רק על routes שליטה (open/start/pause/close/end).
-// routes קריאת מידע (/status, /connected, /leaderboard וכו') לא מקבלים אותו —
-// הם נקראים מיד בטעינת הדף ויש להם fallback כשאין משחק פעיל.
-// העברת requireLiveGameOwnership גלובלית גרמה לכל הדשבורד לקרוס
-// ברגע שאין משחק פעיל (Socket.io reconnect loop).
+// לפעולות שליטה (open/start/pause/close/end) שדורשות שהמשחק הזה יהיה חי כרגע
+// בזיכרון (gs). routes קריאת מידע בלבד לא מקבלים את זה - הם עובדים גם על משחק
+// לא-חי (מציגים נתונים היסטוריים/ריקים).
+function requireLiveState(req, res, next) {
+    const gs = getGameState(req.gameId);
+    if (!gs) return res.status(404).json({ error: 'המשחק הזה לא חי כרגע - יש להפעיל אותו מתוך "המשחקים שלי"' });
+    req.gameState = gs;
+    next();
+}
 
 function getTotalWindowMs(question) {
-    // כל משך הזמן האמיתי שבו ימות אמור להיות ב-read= עבור השאלה הזו:
-    // חלון "ראש-התחלה" (מכסה את הפיגור הטבעי של ימות בין קבלת הפקודה
-    // לתחילת ההאזנה בפועל) + חלון המענה הגלוי שהמנהל הגדיר.
     return (CONFIG.READING_SECONDS + question.answerWindowSeconds) * 1000;
 }
 
-// קובע/מאפס את שני הטיימרים של שאלה פתוחה, לפי state.openedAt הנוכחי:
-// 1. visualTimer - מתי לשדר ללקוחות שהטיימר הגלוי מתחיל לרוץ (questionTimerStarted)
-// 2. closeTimer - מתי לסגור את השאלה בפועל ולחשב תוצאות
-// נקרא גם בפתיחה רגילה וגם ב-resume אחרי השהיה, כדי להמשיך בדיוק מאותה נקודה.
-function armQuestionTimers(app, question) {
+function armQuestionTimers(io, gs, question) {
+    const gameId = gs.activeGame._id;
     const totalWindowMs = getTotalWindowMs(question);
-    const visualStartAt = state.openedAt + CONFIG.READING_SECONDS * 1000;
-    const closeAt = state.openedAt + totalWindowMs + 3000; // 3 שניות חסד לסגירה
+    const visualStartAt = gs.openedAt + CONFIG.READING_SECONDS * 1000;
+    const closeAt = gs.openedAt + totalWindowMs + 3000;
 
-    if (visualTimer) clearTimeout(visualTimer);
+    if (gs.timers.visualTimer) clearTimeout(gs.timers.visualTimer);
     const visualDelay = Math.max(0, visualStartAt - Date.now());
-    visualTimer = setTimeout(() => {
-        if (!state.currentQuestion || String(state.currentQuestion._id) !== String(question._id)) return;
-        if (state.status !== 'open') return; // הושהה בינתיים - אל תפעיל טיימר גלוי
-        app.get('io').emit('questionTimerStarted', {
+    gs.timers.visualTimer = setTimeout(() => {
+        if (!gs.currentQuestion || String(gs.currentQuestion._id) !== String(question._id)) return;
+        if (gs.status !== 'open') return;
+        io.to(roomName(gameId)).emit('questionTimerStarted', {
             questionId: question._id,
             openedAt: visualStartAt,
             answerWindowSeconds: question.answerWindowSeconds
         });
     }, visualDelay);
 
-    if (closeTimer) clearTimeout(closeTimer);
+    if (gs.timers.closeTimer) clearTimeout(gs.timers.closeTimer);
     const closeDelay = Math.max(0, closeAt - Date.now());
-    const capturedOpenedAt = state.openedAt;
-    closeTimer = setTimeout(async () => {
+    const capturedOpenedAt = gs.openedAt;
+    gs.timers.closeTimer = setTimeout(async () => {
         if (
-            state.currentQuestion &&
-            String(state.currentQuestion._id) === String(question._id) &&
-            state.status === 'open'
+            gs.currentQuestion &&
+            String(gs.currentQuestion._id) === String(question._id) &&
+            gs.status === 'open'
         ) {
-            state.status = 'idle';
-            app.get('io').emit('questionClosed', { questionId: question._id });
-            await computeAndEmitResults(app, question, capturedOpenedAt);
-            // הועבר מעבר אוטומטי לשאלה הבאה - המנחה עובר בעצמו דרך חצי הניווט בלבד.
+            gs.status = 'idle';
+            io.to(roomName(gameId)).emit('questionClosed', { questionId: question._id });
+            await computeAndEmitResults(io, gs, question, capturedOpenedAt);
         }
     }, closeDelay);
 }
 
-// בודק אם קיימת שאלה קודמת/הבאה ביחס לשאלה נתונה, לפי order. נשלח ללקוח
-// יחד עם כל פתיחת שאלה - כדי שחצי הניווט ידעו מיד אם להיות פעילים, בלי
-// להסתמך על רשימת השאלות שנטענת בנפרד אצל הלקוח (מונע מצב של חצים "תקועים").
 async function getNavAvailability(gameId, question) {
     if (!question) return { hasNext: false, hasPrev: false };
     const [next, prev] = await Promise.all([
@@ -77,52 +76,45 @@ async function getNavAvailability(gameId, question) {
     return { hasNext: !!next, hasPrev: !!prev };
 }
 
-// פתיחת שאלה: רק מציגה אותה על המסך (state.status='displayed') - בלי טיימר,
-// בלי קליטת תשובות. הכל ממתין ללחיצת המנחה על "פתיחת מענה" (ראו beginAnswering).
-// זה נותן למנחה שליטה מלאה על הקצב - השאלה מוצגת, הקהל קורא אותה, ורק כשהמנחה
-// מוכן הוא פותח את המענה בפועל.
-async function openQuestion(app, question) {
-    if (visualTimer) clearTimeout(visualTimer);
-    if (closeTimer) clearTimeout(closeTimer);
+async function openQuestion(io, gs, question) {
+    if (gs.timers.visualTimer) clearTimeout(gs.timers.visualTimer);
+    if (gs.timers.closeTimer) clearTimeout(gs.timers.closeTimer);
 
-    state.status = 'displayed';
-    state.currentQuestion = question;
-    state.openedAt = null;
-    state.pausedRemainingMs = null;
+    gs.status = 'displayed';
+    gs.currentQuestion = question;
+    gs.openedAt = null;
+    gs.pausedRemainingMs = null;
 
-    const nav = await getNavAvailability(question.game, question);
-    app.get('io').emit('questionOpened', {
+    const gameId = gs.activeGame._id;
+    const nav = await getNavAvailability(gameId, question);
+    io.to(roomName(gameId)).emit('questionOpened', {
         question,
-        autoAdvance: state.autoAdvance,
+        autoAdvance: gs.autoAdvance,
         ...nav
     });
 }
 
-// פתיחת המענה בפועל (נקרא מ-POST /admin/begin-answering, אחרי לחיצת המנחה):
-// תשובות נקלטות מיידית (state.status='open' מהשנייה הראשונה) - זה נותן לימות
-// "ראש-התחלה" להתגבר על הפיגור הטבעי שלו לפני שהוא מתחיל להאזין ללחיצות בפועל.
-// הצופים רואים את הטיימר הגלוי רק אחרי READING_SECONDS - כך שעד שהם רואים אותו
-// זז, ימות כבר קולט לחיצות בזמן אמת.
-async function beginAnswering(app) {
-    const question = state.currentQuestion;
-    if (!question || state.status !== 'displayed') return false;
+async function beginAnswering(io, gs) {
+    const question = gs.currentQuestion;
+    if (!question || gs.status !== 'displayed') return false;
 
-    state.status = 'open';
-    state.openedAt = Date.now();
-    state.pausedRemainingMs = null;
-    state.playersAtOpen = await Player.countDocuments({ active: true, game: question.game });
+    gs.status = 'open';
+    gs.openedAt = Date.now();
+    gs.pausedRemainingMs = null;
+    gs.playersAtOpen = await Player.countDocuments({ active: true, game: question.game });
 
-    app.get('io').emit('answeringBegan', {
+    const gameId = gs.activeGame._id;
+    io.to(roomName(gameId)).emit('answeringBegan', {
         questionId: question._id,
         readingSeconds: CONFIG.READING_SECONDS,
         answerWindowSeconds: question.answerWindowSeconds
     });
 
-    armQuestionTimers(app, question);
+    armQuestionTimers(io, gs, question);
     return true;
 }
 
-async function computeAndEmitResults(app, question, openedAt) {
+async function computeAndEmitResults(io, gs, question, openedAt) {
     const sinceDate = new Date(openedAt);
     const answers = await Answer.find({
         question: question._id,
@@ -136,32 +128,17 @@ async function computeAndEmitResults(app, question, openedAt) {
     });
 
     const totalAnswered = answers.length;
-    const noAnswerCount = Math.max(0, (state.playersAtOpen || 0) - totalAnswered);
+    const noAnswerCount = Math.max(0, (gs.playersAtOpen || 0) - totalAnswered);
     const percentages = counts.map((c) =>
         totalAnswered ? Math.round((c / totalAnswered) * 100) : 0
     );
 
-    app.get('io').emit('questionResults', {
+    io.to(roomName(gs.activeGame._id)).emit('questionResults', {
         questionId: question._id,
         isSurvey: !!question.isSurvey,
         counts, percentages, totalAnswered, noAnswerCount,
         correctIndex: question.isSurvey ? null : question.correctIndex
     });
-}
-
-async function advanceToNext(app, prevQuestion) {
-    if (!state.autoAdvance) return;
-    const next = await Question.findOne({
-        game: prevQuestion.game,
-        order: { $gt: prevQuestion.order }
-    }).sort({ order: 1 });
-
-    if (next) {
-        await openQuestion(app, next);
-    } else {
-        state.autoAdvance = false;
-        await finishGame(app, prevQuestion.game);
-    }
 }
 
 async function buildFinalResults(gameId) {
@@ -226,49 +203,43 @@ async function buildFinalResults(gameId) {
     return combined.map((p, i) => ({ rank: i + 1, ...p }));
 }
 
-async function finishGame(app, gameId) {
+async function finishGame(io, gameId) {
     const results = await buildFinalResults(gameId);
-    app.get('io').emit('gameEnded', { results });
+    io.to(roomName(gameId)).emit('gameEnded', { results });
 }
 
-// ===== פעולות שליטה — דורשות משחק פעיל + בעלות =====
+// ===== פעולות שליטה — דורשות שהמשחק הזה יהיה חי כרגע (requireLiveState) =====
 
-router.post('/open-question/:id', requireLiveGameOwnership, async (req, res) => {
+router.post('/open-question/:id', requireLiveState, async (req, res) => {
     const question = await Question.findOne({ _id: req.params.id, game: req.gameId });
     if (!question) return res.status(404).json({ error: 'שאלה לא נמצאה' });
-    if (advanceTimer) clearTimeout(advanceTimer);
-    await openQuestion(req.app, question);
+    await openQuestion(req.app.get('io'), req.gameState, question);
     res.json({ success: true, question });
 });
 
-// ניווט ידני לשאלה הבאה/הקודמת לפי סדר (order). משתמש באותה openQuestion() -
-// כלומר השאלה רק מוצגת, וממתינה ללחיצת "פתיחת מענה" של המנחה, בדיוק כמו כל שאלה אחרת.
-router.post('/next-question', requireLiveGameOwnership, async (req, res) => {
-    if (advanceTimer) clearTimeout(advanceTimer);
-    const current = state.currentQuestion;
+router.post('/next-question', requireLiveState, async (req, res) => {
+    const gs = req.gameState;
+    const current = gs.currentQuestion;
     const query = current
         ? { game: req.gameId, order: { $gt: current.order } }
         : { game: req.gameId };
     const next = await Question.findOne(query).sort({ order: 1 });
     if (!next) return res.status(400).json({ error: 'זו כבר השאלה האחרונה' });
-    await openQuestion(req.app, next);
+    await openQuestion(req.app.get('io'), gs, next);
     res.json({ success: true, question: next });
 });
 
-router.post('/prev-question', requireLiveGameOwnership, async (req, res) => {
-    if (advanceTimer) clearTimeout(advanceTimer);
-    const current = state.currentQuestion;
+router.post('/prev-question', requireLiveState, async (req, res) => {
+    const gs = req.gameState;
+    const current = gs.currentQuestion;
     if (!current) return res.status(400).json({ error: 'אין שאלה נוכחית' });
     const prev = await Question.findOne({ game: req.gameId, order: { $lt: current.order } }).sort({ order: -1 });
     if (!prev) return res.status(400).json({ error: 'זו כבר השאלה הראשונה' });
-    await openQuestion(req.app, prev);
+    await openQuestion(req.app.get('io'), gs, prev);
     res.json({ success: true, question: prev });
 });
 
-// נקרא מה-frontend רגע לפני "התחל משחק", כדי להציג אזהרה עם מספרים אמיתיים
-// אם כבר יש Player/Answer קיימים למשחק הזה (למשל: קריסת state בזיכרון באמצע
-// סשן קודם) - start-game מוחק אותם במכוון, וזה עלול להיות בלתי-הפיך בטעות.
-router.get('/start-game-preview', requireLiveGameOwnership, async (req, res) => {
+router.get('/start-game-preview', requireLiveState, async (req, res) => {
     const [playerCount, answerCount] = await Promise.all([
         Player.countDocuments({ game: req.gameId }),
         Answer.countDocuments({ game: req.gameId })
@@ -276,137 +247,132 @@ router.get('/start-game-preview', requireLiveGameOwnership, async (req, res) => 
     res.json({ playerCount, answerCount });
 });
 
-router.post('/start-game', requireLiveGameOwnership, async (req, res) => {
+router.post('/start-game', requireLiveState, async (req, res) => {
     const first = await Question.findOne({ game: req.gameId }).sort({ order: 1 });
     if (!first) return res.status(400).json({ error: 'אין שאלות במאגר' });
 
-    // *** כאן מתבצע האיפוס בפועל ***
-    // "התחל משחק" הוא הרגע שבו בפועל מתחיל סשן חדש מבחינת המנחה - לכן כאן,
-    // ולא רק בהפעלת המשחק מ"המשחקים שלי", מוחקים את כל ה-Player וה-Answer
-    // הקודמים ששייכים למשחק הזה (req.gameId). ה-Contact (כינויים) לא נמחקים,
-    // כי הם שייכים לבן-אדם ולא לסשן ספציפי.
     await Promise.all([
         Player.deleteMany({ game: req.gameId }),
         Answer.deleteMany({ game: req.gameId })
     ]);
 
-    state.autoAdvance = true;
-    if (advanceTimer) clearTimeout(advanceTimer);
-    await openQuestion(req.app, first);
+    req.gameState.autoAdvance = true;
+    await openQuestion(req.app.get('io'), req.gameState, first);
     res.json({ success: true });
 });
 
-// נלחץ מכפתור "פתיחת מענה" אצל המנחה - זה הרגע שבו קליטת התשובות בפועל מתחילה
-router.post('/begin-answering', requireLiveGameOwnership, async (req, res) => {
-    const ok = await beginAnswering(req.app);
+router.post('/begin-answering', requireLiveState, async (req, res) => {
+    const ok = await beginAnswering(req.app.get('io'), req.gameState);
     if (!ok) return res.status(400).json({ error: 'אין שאלה מוצגת שממתינה לפתיחת מענה' });
     res.json({ success: true });
 });
 
-// השהיה אמיתית: אם יש שאלה פתוחה כרגע, מקפיאים אותה בפועל - מפסיקים לקלוט
-// תשובות (status הופך ל-'paused', לא 'open', ו-yemotRoutes.js בודק בדיוק
-// את זה) ומבטלים את שני הטיימרים כדי שלא ייסגר/יתחיל טיימר גלוי באמצע ההשהיה.
-router.post('/pause', requireLiveGameOwnership, (req, res) => {
-    state.autoAdvance = false;
-    if (advanceTimer) clearTimeout(advanceTimer);
+router.post('/pause', requireLiveState, (req, res) => {
+    const gs = req.gameState;
+    gs.autoAdvance = false;
 
-    if (state.status === 'open' && state.currentQuestion) {
-        if (closeTimer) clearTimeout(closeTimer);
-        if (visualTimer) clearTimeout(visualTimer);
+    if (gs.status === 'open' && gs.currentQuestion) {
+        if (gs.timers.closeTimer) clearTimeout(gs.timers.closeTimer);
+        if (gs.timers.visualTimer) clearTimeout(gs.timers.visualTimer);
 
-        const totalWindowMs = getTotalWindowMs(state.currentQuestion);
-        const elapsedMs = Date.now() - state.openedAt;
-        state.pausedRemainingMs = Math.max(0, totalWindowMs - elapsedMs);
-        state.status = 'paused';
+        const totalWindowMs = getTotalWindowMs(gs.currentQuestion);
+        const elapsedMs = Date.now() - gs.openedAt;
+        gs.pausedRemainingMs = Math.max(0, totalWindowMs - elapsedMs);
+        gs.status = 'paused';
     }
 
-    req.app.get('io').emit('gamePaused', {});
+    req.app.get('io').to(roomName(req.gameId)).emit('gamePaused', {});
     res.json({ success: true });
 });
 
-// המשך: אם הייתה שאלה מושהית, ממשיכים אותה בדיוק מהנקודה שבה הושהתה
-// (מזיזים את openedAt אחורה כך שהזמן שנותר יישאר זהה), במקום לפתוח שאלה חדשה.
-router.post('/resume', requireLiveGameOwnership, async (req, res) => {
-    state.autoAdvance = true;
+router.post('/resume', requireLiveState, async (req, res) => {
+    const gs = req.gameState;
+    const io = req.app.get('io');
+    gs.autoAdvance = true;
 
-    if (state.status === 'paused' && state.currentQuestion && state.pausedRemainingMs != null) {
-        const question = state.currentQuestion;
+    if (gs.status === 'paused' && gs.currentQuestion && gs.pausedRemainingMs != null) {
+        const question = gs.currentQuestion;
         const totalWindowMs = getTotalWindowMs(question);
-        state.openedAt = Date.now() - (totalWindowMs - state.pausedRemainingMs);
-        state.pausedRemainingMs = null;
-        state.status = 'open';
-        armQuestionTimers(req.app, question);
-    } else if (state.status !== 'open' && state.status !== 'paused' && state.status !== 'displayed') {
-        const next = state.currentQuestion
-            ? await Question.findOne({ game: req.gameId, order: { $gt: state.currentQuestion.order } }).sort({ order: 1 })
+        gs.openedAt = Date.now() - (totalWindowMs - gs.pausedRemainingMs);
+        gs.pausedRemainingMs = null;
+        gs.status = 'open';
+        armQuestionTimers(io, gs, question);
+    } else if (gs.status !== 'open' && gs.status !== 'paused' && gs.status !== 'displayed') {
+        const next = gs.currentQuestion
+            ? await Question.findOne({ game: req.gameId, order: { $gt: gs.currentQuestion.order } }).sort({ order: 1 })
             : await Question.findOne({ game: req.gameId }).sort({ order: 1 });
-        if (next) await openQuestion(req.app, next);
+        if (next) await openQuestion(io, gs, next);
     }
 
-    req.app.get('io').emit('gameResumed', {});
+    io.to(roomName(req.gameId)).emit('gameResumed', {});
     res.json({ success: true });
 });
 
-router.post('/close-question', requireLiveGameOwnership, async (req, res) => {
-    if (visualTimer) clearTimeout(visualTimer);
-    if (closeTimer) clearTimeout(closeTimer);
-    if (advanceTimer) clearTimeout(advanceTimer);
-    const question = state.currentQuestion;
-    const openedAt = state.openedAt;
-    const wasAnswerable = state.status === 'open' || state.status === 'paused';
-    state.status = 'idle';
-    state.pausedRemainingMs = null;
-    req.app.get('io').emit('questionClosed', { questionId: question?._id });
-    if (question && wasAnswerable) await computeAndEmitResults(req.app, question, openedAt);
+router.post('/close-question', requireLiveState, async (req, res) => {
+    const gs = req.gameState;
+    const io = req.app.get('io');
+    if (gs.timers.visualTimer) clearTimeout(gs.timers.visualTimer);
+    if (gs.timers.closeTimer) clearTimeout(gs.timers.closeTimer);
+    const question = gs.currentQuestion;
+    const openedAt = gs.openedAt;
+    const wasAnswerable = gs.status === 'open' || gs.status === 'paused';
+    gs.status = 'idle';
+    gs.pausedRemainingMs = null;
+    io.to(roomName(req.gameId)).emit('questionClosed', { questionId: question?._id });
+    if (question && wasAnswerable) await computeAndEmitResults(io, gs, question, openedAt);
     res.json({ success: true });
 });
 
-router.post('/end-game', requireLiveGameOwnership, async (req, res) => {
-    if (visualTimer) clearTimeout(visualTimer);
-    if (closeTimer) clearTimeout(closeTimer);
-    if (advanceTimer) clearTimeout(advanceTimer);
-    const question = state.currentQuestion;
-    const openedAt = state.openedAt;
-    if (question && (state.status === 'open' || state.status === 'paused')) {
-        state.status = 'idle';
-        req.app.get('io').emit('questionClosed', { questionId: question._id });
-        await computeAndEmitResults(req.app, question, openedAt);
+router.post('/end-game', requireLiveState, async (req, res) => {
+    const gs = req.gameState;
+    const io = req.app.get('io');
+    if (gs.timers.visualTimer) clearTimeout(gs.timers.visualTimer);
+    if (gs.timers.closeTimer) clearTimeout(gs.timers.closeTimer);
+    const question = gs.currentQuestion;
+    const openedAt = gs.openedAt;
+    if (question && (gs.status === 'open' || gs.status === 'paused')) {
+        gs.status = 'idle';
+        io.to(roomName(req.gameId)).emit('questionClosed', { questionId: question._id });
+        await computeAndEmitResults(io, gs, question, openedAt);
     }
-    state.autoAdvance = false;
-    state.status = 'idle';
-    state.currentQuestion = null;
-    state.pausedRemainingMs = null;
-    await finishGame(req.app, req.gameId);
+    gs.autoAdvance = false;
+    gs.status = 'idle';
+    gs.currentQuestion = null;
+    gs.pausedRemainingMs = null;
+    await finishGame(io, req.gameId);
     res.json({ success: true });
 });
 
-// ===== קריאת מידע — requireAuth בלבד, ללא requireLiveGameOwnership =====
-// (עובדים גם כשאין משחק פעיל, מחזירים מידע ריק או null)
+// ===== קריאת מידע — requireGameContext בלבד (כבר הוגדר גלובלית למעלה) =====
 
 router.get('/status', async (req, res) => {
-    const nav = await getNavAvailability(
-        state.activeGame ? state.activeGame._id : null,
-        state.currentQuestion
-    );
+    const gs = getGameState(req.gameId);
+    if (!gs) {
+        return res.json({
+            status: 'idle', currentQuestion: null, autoAdvance: false, openedAt: null,
+            readingSeconds: CONFIG.READING_SECONDS, playersAtOpen: 0, activeGame: null,
+            hasNext: false, hasPrev: false
+        });
+    }
+    const nav = await getNavAvailability(req.gameId, gs.currentQuestion);
     res.json({
-        status: state.status,
-        currentQuestion: state.currentQuestion,
-        autoAdvance: state.autoAdvance,
-        openedAt: state.openedAt,
+        status: gs.status,
+        currentQuestion: gs.currentQuestion,
+        autoAdvance: gs.autoAdvance,
+        openedAt: gs.openedAt,
         readingSeconds: CONFIG.READING_SECONDS,
-        playersAtOpen: state.playersAtOpen,
-        activeGame: state.activeGame,
+        playersAtOpen: gs.playersAtOpen,
+        activeGame: gs.activeGame,
         ...nav
     });
 });
 
 router.get('/questions', async (req, res) => {
-    if (!state.activeGame) return res.json([]);
-    const questions = await Question.find({ game: state.activeGame._id }).sort({ order: 1 });
+    const questions = await Question.find({ game: req.gameId }).sort({ order: 1 });
     res.json(questions);
 });
 
-router.post('/questions', requireLiveGameOwnership, async (req, res) => {
+router.post('/questions', requireLiveState, async (req, res) => {
     try {
         const { text, options, answerWindowSeconds } = req.body;
         const isSurvey = !!req.body.isSurvey;
@@ -437,7 +403,7 @@ router.post('/questions', requireLiveGameOwnership, async (req, res) => {
     }
 });
 
-router.patch('/questions/:id', requireLiveGameOwnership, async (req, res) => {
+router.patch('/questions/:id', requireLiveState, async (req, res) => {
     try {
         const { text, options, answerWindowSeconds } = req.body;
         const isSurvey = !!req.body.isSurvey;
@@ -471,12 +437,12 @@ router.patch('/questions/:id', requireLiveGameOwnership, async (req, res) => {
     }
 });
 
-router.delete('/questions/:id', requireLiveGameOwnership, async (req, res) => {
+router.delete('/questions/:id', requireLiveState, async (req, res) => {
     await Question.findOneAndDelete({ _id: req.params.id, game: req.gameId });
     res.json({ success: true });
 });
 
-router.post('/questions/reorder', requireLiveGameOwnership, async (req, res) => {
+router.post('/questions/reorder', requireLiveState, async (req, res) => {
     const { orderedIds } = req.body;
     if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'נתונים לא תקינים' });
     await Promise.all(orderedIds.map((id, idx) =>
@@ -486,8 +452,7 @@ router.post('/questions/reorder', requireLiveGameOwnership, async (req, res) => 
 });
 
 router.get('/leaderboard', async (req, res) => {
-    if (!state.activeGame) return res.json([]);
-    const gameId = state.activeGame._id;
+    const gameId = req.gameId;
 
     const players = await Player.aggregate([
         { $match: { game: gameId } },
@@ -529,8 +494,7 @@ router.get('/leaderboard', async (req, res) => {
 });
 
 router.get('/leaderboard-speed', async (req, res) => {
-    if (!state.activeGame) return res.json([]);
-    const gameId = state.activeGame._id;
+    const gameId = req.gameId;
 
     const speed = await Answer.aggregate([
         { $match: { game: gameId, isCorrect: true, responseTimeMs: { $ne: null } } },
@@ -568,8 +532,7 @@ router.get('/leaderboard-speed', async (req, res) => {
 });
 
 router.get('/connected', async (req, res) => {
-    if (!state.activeGame) return res.json([]);
-    const gameId = state.activeGame._id;
+    const gameId = req.gameId;
 
     const active = await Player.find({ active: true, game: gameId }).sort({ connectedAt: -1 });
     const latestByPhone = new Map();
@@ -587,8 +550,7 @@ router.get('/connected', async (req, res) => {
 });
 
 router.get('/contacts', async (req, res) => {
-    if (!state.activeGame) return res.json([]);
-    const gameId = state.activeGame._id;
+    const gameId = req.gameId;
 
     const playerPhones = new Set(await Player.distinct('phone', { game: gameId }));
     const contacts = await Contact.find({ game: gameId });
@@ -599,7 +561,7 @@ router.get('/contacts', async (req, res) => {
     })));
 });
 
-router.post('/contacts', requireLiveGameOwnership, async (req, res) => {
+router.post('/contacts', requireLiveState, async (req, res) => {
     try {
         const { phone, name } = req.body;
         if (!phone) return res.status(400).json({ error: 'חסר מספר טלפון' });
@@ -611,17 +573,23 @@ router.post('/contacts', requireLiveGameOwnership, async (req, res) => {
                 { upsert: true }
             );
         } catch (innerErr) {
-            // סביר שקיים כבר Contact עם אותו טלפון משחק/סשן קודם, ויש אינדקס ייחודי
-            // שלא לוקח בחשבון את המשחק (רק על phone) - מוחקים את הישן ויוצרים חדש
             if (innerErr.code === 11000) {
-                await Contact.deleteMany({ phone });
-                await Contact.create({ game: req.gameId, phone, name: name || null });
+                const existing = await Contact.findOne({ game: req.gameId, phone });
+                if (existing) {
+                    existing.name = name || null;
+                    await existing.save();
+                } else {
+                    console.error(`[CONTACTS] duplicate-key על phone=${phone} game=${req.gameId} בלי קונטקט קיים למשחק הזה - קרוב לוודאי אינדקס ישן ב-DB (unique על phone לבד)`);
+                    return res.status(409).json({
+                        error: 'לא ניתן לשמור איש קשר זה כרגע - קיים סיכוך באינדקס בסיס הנתונים (טלפון זה כנראה רשום למשחק אחר). יש לפנות למפתח לתיקון האינדקס.'
+                    });
+                }
             } else {
                 throw innerErr;
             }
         }
 
-        req.app.get('io').emit('contactUpdated', { phone, name: name || null });
+        req.app.get('io').to(roomName(req.gameId)).emit('contactUpdated', { phone, name: name || null });
         res.json({ success: true });
     } catch (err) {
         console.error('שגיאה בהוספת איש קשר:', err);
@@ -629,7 +597,7 @@ router.post('/contacts', requireLiveGameOwnership, async (req, res) => {
     }
 });
 
-router.delete('/players/:phone', requireLiveGameOwnership, async (req, res) => {
+router.delete('/players/:phone', requireLiveState, async (req, res) => {
     const { phone } = req.params;
     const players = await Player.find({ game: req.gameId, phone });
     const playerIds = players.map((p) => p._id);
@@ -638,13 +606,12 @@ router.delete('/players/:phone', requireLiveGameOwnership, async (req, res) => {
         Player.deleteMany({ game: req.gameId, phone }),
         Contact.deleteOne({ game: req.gameId, phone })
     ]);
-    req.app.get('io').emit('playerDeleted', { phone });
+    req.app.get('io').to(roomName(req.gameId)).emit('playerDeleted', { phone });
     res.json({ success: true });
 });
 
 router.get('/final-results', async (req, res) => {
-    if (!state.activeGame) return res.json([]);
-    const results = await buildFinalResults(state.activeGame._id);
+    const results = await buildFinalResults(req.gameId);
     res.json(results);
 });
 

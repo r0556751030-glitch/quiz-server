@@ -6,13 +6,23 @@ const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const { state, setActiveGame } = require('../game/gameState');
+const { activateGame, deactivateGame } = require('../game/gameState');
 const { requireAuth, requireAdmin, requireGameOwnership } = require('../middleware/auth');
 
 function slugify(text) {
   return (text || '').trim().toLowerCase()
     .replace(/[^\u0590-\u05FFa-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || `game-${Date.now()}`;
+}
+
+// קוד מספרי בן 4 ספרות שהמתקשר מקיש בשלוחה כדי להצטרף למשחק הספציפי (שלב 4).
+// ייחודי גלובלית - נבדק מול ה-DB ומגריל מחדש עד שנמצא קוד פנוי.
+async function generateUniqueCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999, לא מתחיל באפס
+    if (!(await Game.findOne({ code }))) return code;
+  }
+  throw new Error('לא הצלחנו להגריל קוד משחק פנוי - כנראה שכל טווח הקודים תפוס');
 }
 
 router.use(requireAuth);
@@ -25,6 +35,7 @@ router.get('/', async (req, res) => {
     _id: g._id,
     name: g.name,
     slug: g.slug,
+    code: g.code,
     isActive: g.isActive,
     createdAt: g.createdAt,
     ownerUsername: g.owner ? g.owner.username : null
@@ -44,7 +55,8 @@ router.post('/', async (req, res) => {
   let suffix = 1;
   while (await Game.findOne({ slug })) slug = `${slugify(name)}-${suffix++}`;
 
-  const game = await Game.create({ name: name.trim(), slug, owner: req.auth.userId });
+  const code = await generateUniqueCode();
+  const game = await Game.create({ name: name.trim(), slug, code, owner: req.auth.userId });
   res.json({ success: true, game });
 });
 
@@ -71,7 +83,7 @@ router.delete('/:gameId', requireGameOwnership, async (req, res) => {
   res.json({ success: true });
 });
 
-// ===== הפעלת המשחק הזה כ"חי" - רק משחק אחד יכול להיות חי בו-זמנית בכל המערכת =====
+// ===== הפעלת המשחק הזה כ"חי" - שלב 4: כמה משחקים יכולים להיות חיים בו-זמנית =====
 // כל הפעלה (גם של אותו משחק שכבר רץ בעבר) = "סשן" חדש: מוחקים שחקנים ותשובות
 // כדי שהלוח יתחיל נקי (ניקוד 0, בלי זמני תגובה ישנים). כינויים (Contact) נשארים,
 // כי הם שייכים לאנשים ולא לסשן ספציפי. תוך כדי משחק רץ (השהיה/המשך/מעבר שאלות)
@@ -87,7 +99,8 @@ router.get('/:gameId/activate-preview', requireGameOwnership, async (req, res) =
 });
 
 router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
-  await Game.updateMany({ _id: { $ne: req.game._id } }, { isActive: false });
+  // הוסר: Game.updateMany({...}, {isActive:false}) - זה היה האילוץ "רק משחק אחד
+  // חי בכל המערכת". עכשיו כמה משחקים יכולים להיות isActive:true בו-זמנית.
   req.game.isActive = true;
   await req.game.save();
 
@@ -96,9 +109,13 @@ router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
     Answer.deleteMany({ game: req.game._id })
   ]);
 
-  setActiveGame(req.game);
+  activateGame(req.game);
 
-  req.app.get('io').emit('gameSwitched', { gameId: req.game._id, gameName: req.game.name });
+  // TODO(שלב 4 - המשך): io.emit גלובלי כאן שגוי עכשיו כשכמה משחקים חיים בו-זמנית -
+  // זה ישדר "gameSwitched" לכל הדשבורדים, כולל של משחקים אחרים שלא קשורים בכלל.
+  // צריך socket room ייעודי למשחק הזה (game:<gameId>) - עדיין לא מחובר, ממתין
+  // לעדכון admin.js/admin.html בצעד הבא. בינתיים לא משדרים בכלל, כדי לא לשבור
+  // דשבורדים של משחקים אחרים.
   res.json({ success: true });
 });
 
@@ -107,10 +124,9 @@ router.post('/:gameId/deactivate', requireGameOwnership, async (req, res) => {
   req.game.isActive = false;
   await req.game.save();
 
-  if (state.activeGame && String(state.activeGame._id) === String(req.game._id)) {
-    setActiveGame(null);
-    req.app.get('io').emit('gameSwitched', { gameId: null, gameName: null });
-  }
+  deactivateGame(req.game._id);
+  // TODO(שלב 4 - המשך): כנ"ל - צריך לשדר 'gameEnded'/סגירה רק ל-room של המשחק הזה,
+  // לא גלובלית לכולם. ממתין לחיבור socket rooms.
   res.json({ success: true });
 });
 
