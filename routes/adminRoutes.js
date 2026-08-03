@@ -426,6 +426,40 @@ router.post('/questions', requireLiveGameOwnership, async (req, res) => {
     }
 });
 
+router.patch('/questions/:id', requireLiveGameOwnership, async (req, res) => {
+    try {
+        const { text, options, answerWindowSeconds } = req.body;
+        const isSurvey = !!req.body.isSurvey;
+        const correctIndex = req.body.correctIndex != null ? Number(req.body.correctIndex) : null;
+
+        if (!text || !Array.isArray(options) || options.length < 2 || options.length > 9) {
+            return res.status(400).json({ error: 'יש למלא טקסט ובין 2 ל-9 אפשרויות' });
+        }
+        if (!isSurvey && (correctIndex === null || correctIndex < 0 || correctIndex >= options.length)) {
+            return res.status(400).json({ error: 'יש לבחור תשובה נכונה תקינה' });
+        }
+
+        const question = await Question.findOneAndUpdate(
+            { _id: req.params.id, game: req.gameId },
+            {
+                text,
+                options,
+                correctIndex: isSurvey ? null : correctIndex,
+                isSurvey,
+                answerWindowSeconds: Number(answerWindowSeconds) || 15
+            },
+            { new: true }
+        );
+
+        if (!question) return res.status(404).json({ error: 'שאלה לא נמצאה' });
+
+        res.json({ success: true, question });
+    } catch (err) {
+        console.error('שגיאה בעריכת שאלה:', err);
+        res.status(500).json({ error: 'שגיאה בעריכת השאלה' });
+    }
+});
+
 router.delete('/questions/:id', requireLiveGameOwnership, async (req, res) => {
     await Question.findOneAndDelete({ _id: req.params.id, game: req.gameId });
     res.json({ success: true });
