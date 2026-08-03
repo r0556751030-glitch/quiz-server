@@ -61,8 +61,14 @@ router.post('/api', async (req, res) => {
             const name = await getContactName(gameId, phone);
             io.emit('playerConnected', { callId, phone, playerId: player._id, score: player.score, name });
         } else if (!player.active) {
+            // חוזר לפעילות אחרי ניתוק (למשל: ניתוק זמני ברשת, לא hangup אמיתי).
+            // חסר io.emit כאן היה מקור החשד המוביל לבאג "מונה מחוברים לא מסונכרן" -
+            // הלקוח (admin.js) מעדכן activeCallIds רק דרך playerConnected/playerDisconnected,
+            // ובנתיב הזה לא נשלח שום אירוע כשהשחקן חוזר.
             player.active = true;
             await player.save();
+            const name = await getContactName(gameId, phone);
+            io.emit('playerConnected', { callId, phone, playerId: player._id, score: player.score, name });
         }
 
         // ===== קליטת תשובה לשאלה פתוחה =====

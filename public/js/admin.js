@@ -58,15 +58,27 @@ let lastJoinedTimer = null;
 socket.on('playerConnected', (p) => {
   activeCallIds.add(p.callId);
   updateConnectedCount();
+  refreshConnectionsPanelIfVisible();
   const lastJoined = document.getElementById('lastJoined');
   document.getElementById('lastJoinedName').textContent = p.name || p.phone || '';
   lastJoined.hidden = false;
   if (lastJoinedTimer) clearTimeout(lastJoinedTimer);
   lastJoinedTimer = setTimeout(() => { lastJoined.hidden = true; }, 1000);
 });
-socket.on('playerDisconnected', (p) => { activeCallIds.delete(p.callId); updateConnectedCount(); });
+socket.on('playerDisconnected', (p) => {
+  activeCallIds.delete(p.callId);
+  updateConnectedCount();
+  refreshConnectionsPanelIfVisible();
+});
 function updateConnectedCount() {
   document.getElementById('connectedCount').textContent = activeCallIds.size;
+}
+// פאנל "מחוברים כרגע" נטען פעם אחת בלחיצת טאב - זה גרם לו להיות "קפוא" עד
+// שהמנחה עוזב ושב לטאב. עכשיו הוא מתרענן גם באירוע חי, אבל רק אם הטאב פתוח כרגע -
+// אין טעם לבזבז קריאת שרת על פאנל מוסתר.
+function refreshConnectionsPanelIfVisible() {
+  const panel = document.getElementById('panel-connections');
+  if (panel && !panel.hidden) loadConnections();
 }
 
 socket.on('connect', () => {
