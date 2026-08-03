@@ -38,16 +38,35 @@ async function requireGameOwnership(req, res, next) {
 }
 
 // לפעולות שליטה חיות (open-question / start / pause / leaderboard / connected וכו') -
-// אלה תמיד פועלות רק על המשחק שכרגע "חי" במערכת כולה (state.activeGame), ומוודאות
-// שהמשתמש המחובר הוא הבעלים שלו (או מנהל-על). קובע req.gameId להמשך השרשרת.
-function requireLiveGameOwnership(req, res, next) {
-  const { state } = require('../game/gameState');
-  if (!state.activeGame) return res.status(404).json({ error: 'אין משחק פעיל כרגע - יש להפעיל משחק מתוך "המשחקים שלי"' });
-  if (req.auth.role !== 'admin' && String(state.activeGame.owner) !== String(req.auth.userId)) {
-    return res.status(403).json({ error: 'המשחק הפעיל כרגע שייך למשתמש אחר' });
+// שלב 4: כמה משחקים יכולים להיות "חיים" בו-זמנית, אז אין יותר "המשחק החי היחיד
+// הגלובלי". ה-frontend חייב לציין gameId מפורש בכל בקשה (header x-game-id, או
+// query/body כגיבוי) - זה נבדק כאן מול בעלות, ונקבע req.gameId + req.gameDoc.
+// שים לב: זה לא בודק אם המשחק "חי" כרגע בזיכרון - זה בכוונה (routes קריאת מידע
+// עובדים גם על משחק לא-חי). adminRoutes.js מוסיף בדיקת-חיות משלו (requireLiveState)
+// לפעולות שליטה בפועל.
+async function requireGameContext(req, res, next) {
+  const gameId = req.headers['x-game-id'] || req.query.gameId || (req.body && req.body.gameId);
+  if (!gameId) return res.status(400).json({ error: 'חסר מזהה משחק (gameId)' });
+
+  try {
+    const game = await Game.findById(gameId);
+    if (!game) return res.status(404).json({ error: 'משחק לא נמצא' });
+    if (req.auth.role !== 'admin' && String(game.owner) !== String(req.auth.userId)) {
+      return res.status(403).json({ error: 'המשחק הזה שייך למשתמש אחר' });
+    }
+    req.gameId = String(game._id);
+    req.gameDoc = game;
+    next();
+  } catch (err) {
+    if (err.name === 'CastError') {
+      // gameId לא תקין (למשל "null" כמחרוזת - קורה אם ה-frontend לא באמת קיבל
+      // gameId ושלח את זה כברירת מחדל). ככל הנראה קאש דפדפן ישן/gameId חסר.
+      console.error(`⚠️ requireGameContext: gameId לא תקין: "${gameId}"`);
+      return res.status(400).json({ error: 'מזהה משחק לא תקין - נסה לרענן את הדף (Ctrl+Shift+R)' });
+    }
+    console.error('❌ שגיאה ב-requireGameContext:', err.message);
+    res.status(500).json({ error: 'שגיאה בטעינת המשחק' });
   }
-  req.gameId = state.activeGame._id;
-  next();
 }
 
-module.exports = { requireAuth, requireAdmin, requireGameOwnership, requireLiveGameOwnership };
+module.exports = { requireAuth, requireAdmin, requireGameOwnership, requireGameContext };
