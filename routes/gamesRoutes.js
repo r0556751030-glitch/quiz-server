@@ -76,6 +76,16 @@ router.delete('/:gameId', requireGameOwnership, async (req, res) => {
 // כדי שהלוח יתחיל נקי (ניקוד 0, בלי זמני תגובה ישנים). כינויים (Contact) נשארים,
 // כי הם שייכים לאנשים ולא לסשן ספציפי. תוך כדי משחק רץ (השהיה/המשך/מעבר שאלות)
 // אין כאן שום מחיקה - שם הניקוד כמובן נשמר כרגיל.
+// נקרא מה-frontend רגע לפני "הפעל", כדי להציג אזהרה עם מספרים אמיתיים אם כבר
+// יש Player/Answer קיימים למשחק הזה מסשן קודם - activate מוחק אותם במכוון.
+router.get('/:gameId/activate-preview', requireGameOwnership, async (req, res) => {
+  const [playerCount, answerCount] = await Promise.all([
+    Player.countDocuments({ game: req.game._id }),
+    Answer.countDocuments({ game: req.game._id })
+  ]);
+  res.json({ playerCount, answerCount });
+});
+
 router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
   await Game.updateMany({ _id: { $ne: req.game._id } }, { isActive: false });
   req.game.isActive = true;

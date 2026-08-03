@@ -92,7 +92,18 @@ async function loadGames() {
 }
 
 async function activate(id) {
-  if (!confirm('הפעלת המשחק תתחיל סשן חדש: כל הניקוד והסטטיסטיקות מסשנים קודמים של משחק זה יימחקו. להמשיך?')) return;
+  let msg = 'הפעלת המשחק תתחיל סשן חדש: כל הניקוד והסטטיסטיקות מסשנים קודמים של משחק זה יימחקו. להמשיך?';
+  try {
+    const previewRes = await fetch(`/games/${id}/activate-preview`);
+    if (previewRes.ok) {
+      const { playerCount, answerCount } = await previewRes.json();
+      if (playerCount > 0 || answerCount > 0) {
+        msg = `קיימים כבר ${playerCount} שחקנים ו-${answerCount} תשובות למשחק הזה (כנראה מסשן קודם). ` +
+          `הפעלה תמחק את כל הנתונים האלה לצמיתות. להפעיל בכל זאת?`;
+      }
+    }
+  } catch { /* אם הבדיקה נכשלת, ממשיכים עם האזהרה הגנרית - לא חוסמים את הפעולה בגלל זה */ }
+  if (!confirm(msg)) return;
   const res = await fetch(`/games/${id}/activate`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) { alert(data.error || 'שגיאה בהפעלת המשחק'); return; }

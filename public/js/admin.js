@@ -454,6 +454,19 @@ function setControlState(kind) {
 }
 
 document.getElementById('startBtn').addEventListener('click', async () => {
+  // בדיקה מקדימה: אם כבר יש Player/Answer קיימים למשחק הזה (למשל אחרי קריסת
+  // state בזיכרון באמצע סשן קודם), start-game ימחק אותם במכוון - מזהירים
+  // עם מספרים אמיתיים לפני שממשיכים, כדי שלא יימחקו נתונים בטעות.
+  const previewRes = await authFetch('/admin/start-game-preview');
+  if (previewRes.ok) {
+    const { playerCount, answerCount } = await previewRes.json();
+    if (playerCount > 0 || answerCount > 0) {
+      const msg = `קיימים כבר ${playerCount} שחקנים ו-${answerCount} תשובות למשחק הזה (כנראה מסשן קודם). ` +
+        `התחלת משחק תמחק את כל הנתונים האלה לצמיתות. להתחיל בכל זאת?`;
+      if (!confirm(msg)) return;
+    }
+  }
+
   const res = await authFetch('/admin/start-game', { method: 'POST' });
   if (!res.ok) { const e = await res.json(); alert('שגיאה: ' + e.error); }
 });

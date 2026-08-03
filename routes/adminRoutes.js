@@ -265,6 +265,17 @@ router.post('/prev-question', requireLiveGameOwnership, async (req, res) => {
     res.json({ success: true, question: prev });
 });
 
+// נקרא מה-frontend רגע לפני "התחל משחק", כדי להציג אזהרה עם מספרים אמיתיים
+// אם כבר יש Player/Answer קיימים למשחק הזה (למשל: קריסת state בזיכרון באמצע
+// סשן קודם) - start-game מוחק אותם במכוון, וזה עלול להיות בלתי-הפיך בטעות.
+router.get('/start-game-preview', requireLiveGameOwnership, async (req, res) => {
+    const [playerCount, answerCount] = await Promise.all([
+        Player.countDocuments({ game: req.gameId }),
+        Answer.countDocuments({ game: req.gameId })
+    ]);
+    res.json({ playerCount, answerCount });
+});
+
 router.post('/start-game', requireLiveGameOwnership, async (req, res) => {
     const first = await Question.findOne({ game: req.gameId }).sort({ order: 1 });
     if (!first) return res.status(400).json({ error: 'אין שאלות במאגר' });
