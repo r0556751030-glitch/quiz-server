@@ -6,6 +6,15 @@ let currentRole = null;
 let appInitialized = false;
 let editingQuestionId = null; // מזהה השאלה שנמצאת כרגע בעריכה, או null במצב "הוספת שאלה"
 
+// שלב 4: כמה משחקים יכולים להיות חיים בו-זמנית - הדשבורד הזה שולט תמיד על
+// משחק ספציפי אחד, שמזוהה מה-URL (games.html מעביר admin.html?gameId=...).
+// בלי gameId אין למסך הזה שום הקשר לעבוד איתו - חוזרים לרשימת המשחקים.
+const GAME_ID = new URLSearchParams(location.search).get('gameId');
+if (!GAME_ID) {
+  alert('לא צוין משחק לניהול - חוזרים לרשימת המשחקים.');
+  location.href = '/games.html';
+}
+
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -35,8 +44,12 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   location.href = '/';
 });
 
-async function authFetch(url, options) {
-  const res = await fetch(url, { cache: 'no-store', ...options });
+// שולח gameId בכל בקשה ל-/admin/* דרך header ייעודי (x-game-id) - זה מה ש-
+// requireGameContext ב-auth.js קורא. נקודת-חיבור אחת (authFetch), כדי שלא
+// צריך להוסיף את זה בכל אחת מעשרות קריאות ה-fetch בקובץ הזה בנפרד.
+async function authFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}), 'x-game-id': GAME_ID };
+  const res = await fetch(url, { cache: 'no-store', ...options, headers });
   if (res.status === 401) location.href = '/';
   return res;
 }
@@ -83,6 +96,7 @@ function refreshConnectionsPanelIfVisible() {
 
 socket.on('connect', () => {
   document.getElementById('connDot').className = 'conn-dot on';
+  socket.emit('joinGame', GAME_ID);
   resyncConnectedCount();
 });
 socket.on('disconnect', () => document.getElementById('connDot').className = 'conn-dot off');
@@ -873,7 +887,11 @@ async function loadStatus() {
   connected.forEach((p) => activeCallIds.add(p.callId));
   updateConnectedCount();
 
-  if (s.activeGame) document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
+  if (s.activeGame) {
+    document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
+    const codeEl = document.getElementById('callCardCode');
+    if (codeEl) codeEl.textContent = s.activeGame.code || '----';
+  }
 
   if (s.status === 'displayed' && s.currentQuestion) {
     document.getElementById('idleState').hidden = true;

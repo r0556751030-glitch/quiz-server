@@ -198,6 +198,22 @@ h1 {
 }
 .owner-tag { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
+.game-code-badge {
+  font-size: 13px;
+  color: var(--muted);
+  background: rgba(255,176,46,0.1);
+  border: 1px solid rgba(255,176,46,0.3);
+  border-radius: 8px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+.game-code-badge strong {
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.05em;
+}
+
 .rename-input {
   background: var(--bg);
   border: 1px solid var(--gold);

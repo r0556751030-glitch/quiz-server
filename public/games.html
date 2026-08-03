@@ -73,8 +73,11 @@ async function loadGames() {
         <span class="view-name">${g.name}</span>
         ${myRole === 'admin' ? `<div class="owner-tag">בעלים: ${g.ownerUsername || '—'}</div>` : ''}
       </div>
+      <div class="game-code-badge" title="קוד המשחק - זה מה שהמתקשרים מקישים כדי להצטרף">
+        קוד הצטרפות: <strong>${g.code || '—'}</strong>
+      </div>
       <span class="status-pill ${g.isActive ? 'live' : 'off'}">${g.isActive ? 'חי כרגע' : 'לא פעיל'}</span>
-      ${g.isActive ? '<button class="btn gold" onclick="location.href=\'/admin.html\'">פתח מסך חי</button>' : ''}
+      ${g.isActive ? `<button class="btn gold" onclick="location.href='/admin.html?gameId=${g._id}'">פתח מסך חי</button>` : ''}
       <button class="btn" data-act="activate" ${g.isActive ? 'disabled' : ''}>הפעל</button>
       <button class="btn" data-act="deactivate" ${g.isActive ? '' : 'disabled'}>הפסק</button>
       <button class="btn" data-act="rename">שנה שם</button>

@@ -686,6 +686,25 @@ form.addq select:focus {
   margin-top: clamp(14px, 2.2vh, 22px);
 }
 
+.call-card-code {
+  font-family: var(--font-body);
+  font-size: clamp(18px, 2.6vh, 28px);
+  font-weight: 700;
+  color: var(--text);
+  margin-top: clamp(16px, 2.4vh, 26px);
+  padding-top: clamp(14px, 2vh, 20px);
+  border-top: 1px dashed rgba(255,215,106,0.3);
+}
+.call-card-code strong {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(28px, 4.6vh, 52px);
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  direction: ltr;
+  display: inline-block;
+}
+
 /* ─── Question live ──────────────────────────────────────── */
 
 .question-live {
