@@ -37,11 +37,14 @@ function buildPollCommand() {
 const codeEntryAttempt = new Map(); // callId -> מספר הניסיון הנוכחי (מתחיל מ-1)
 
 function buildCodeDigitCommand(fieldName, withIntro) {
-    // M1100.wav = "נא הקש סיסמה ובסיום הקש סולמית" - מושמע רק בספרה הראשונה
-    // של כל ניסיון (withIntro=true). בשאר הספרות באותו ניסיון, "Ok" (כמו
-    // בתבניות הקיימות) - כדי לא להשמיע את כל ההודעה מחדש על כל ספרה.
-    const voiceFile = withIntro ? 'M1100' : 'Ok';
-    return `read=f-001=${fieldName},,1,1,${CONFIG.CODE_ENTRY_TIMEOUT_SECONDS},NO,yes,,,0123456789,3,${voiceFile},NOANSWER,,no`;
+    // עדכון (5.8.2026): הוחלף המנגנון הקודם (שם קובץ M1100 בפרמטר קול של ה-read,
+    // ששייך למקור בעצם למנגנון "סיסמת שלוחה" הנפרד של ימות, לא ל-read עצמו) -
+    // בתבנית מתועדת מהפורום: id_list_message=...&read=... (הודעה משולבת עם
+    // בקשת הקשה באותה תגובה אחת). ההשמעה של ההודעה עצמה לוקחת כמה שניות טבעיות -
+    // בדיוק "חוצץ הזמן" שנמצא אמפירית כנחוץ (בלי טיימר מלאכותי), ומחליף לגמרי
+    // את השימוש ב-M1100. מושמעת רק בספרה הראשונה של כל ניסיון (withIntro=true).
+    const intro = withIntro ? `id_list_message=t-אנא הקישו את קוד המשחק בן ארבע הספרות&` : '';
+    return `${intro}read=f-001=${fieldName},,1,1,${CONFIG.CODE_ENTRY_TIMEOUT_SECONDS},NO,yes,,,0123456789,3,Ok,NOANSWER,,no`;
 }
 
 async function markDisconnected(io, callId) {
