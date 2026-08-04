@@ -21,7 +21,14 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/clicker-db
 const app = express();
 // חובה כדי ש-req.ip ישקף את כתובת ה-IP האמיתית של הפונה, לא את כתובת ה-proxy
 // הפנימי של Render - קריטי לאימות מקור ה-CallBack של נדרים פלוס (routes/paymentRoutes.js).
-app.set('trust proxy', 1);
+// חשוב: 2 (לא 1!) - אומת בפועל מול ה-x-forwarded-for בלוגים: השרשרת מגיעה
+// כ-"<IP אמיתי של הצד השני>, <IP של קפיצת proxy נוספת של Render/Cloudflare>",
+// כלומר יש 2 קפיצות proxy לפני שמגיעים לשרת שלנו, לא 1. עם trust proxy=1,
+// req.ip היה מחזיר את קפיצת ה-proxy האמצעית (שמתחלפת בכל בקשה) במקום את
+// כתובת המקור האמיתית - זה גרם לדחיית callbacks אמיתיים מנדרים פלוס
+// (routes/paymentRoutes.js) כאילו הגיעו מ-IP לא מוכר. ראה גם ext.ini/יומן
+// שיחות מימות - אם אי פעם תלוי בזיהוי IP אמיתי במקום אחר, זה המקום לבדוק ראשון.
+app.set('trust proxy', 2);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
