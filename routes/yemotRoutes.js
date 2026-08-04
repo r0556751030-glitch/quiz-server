@@ -3,6 +3,7 @@ const router = express.Router();
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
+const User = require('../models/User');
 const { CONFIG, touch, forget, answerFieldName, getGameState, findGameStateByCode } = require('../game/gameState');
 
 function roomName(gameId) {
@@ -116,6 +117,20 @@ router.post('/api', async (req, res) => {
             if (staleActive.length) {
                 await Player.updateMany({ _id: { $in: staleActive.map(p => p._id) } }, { active: false });
                 staleActive.forEach(p => { forget(p.callId); io.to(roomName(gameId)).emit('playerDisconnected', { callId: p.callId }); });
+            }
+
+            // שלב 5: מגבלת ניסיון חינמי - עד FREE_TRIAL_MAX_PLAYERS משתתפים בו-זמנית
+            // לכל משחק, אלא אם לבעל המשחק יש paidUntil עתידי (גישה מורחבת ששולמה).
+            // נבדק רק בהצטרפות שחקן **חדש** - שחקן שכבר משתתף וממשיך/מתחבר-מחדש לא
+            // נספר שוב (זה מטופל בענף ה-`else if (!player.active)` למטה, לא כאן).
+            const activeCount = await Player.countDocuments({ game: gameId, active: true });
+            if (activeCount >= CONFIG.FREE_TRIAL_MAX_PLAYERS) {
+                const owner = await User.findById(gs.activeGame.owner).select('paidUntil');
+                const hasExtendedAccess = owner && owner.paidUntil && owner.paidUntil > new Date();
+                if (!hasExtendedAccess) {
+                    forget(callId);
+                    return sendOut('trial-limit-reached', `id_list_message=t-המשחק הגיע למגבלת ${CONFIG.FREE_TRIAL_MAX_PLAYERS} משתתפים בגרסת הניסיון, אנא נסו שוב מאוחר יותר`);
+                }
             }
 
             player = await Player.create({ game: gameId, phone, callId });

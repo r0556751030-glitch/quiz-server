@@ -22,6 +22,14 @@
     <h1 id="pageTitle">המשחקים שלי</h1>
     <p class="sub" id="pageSub">צרו משחק חדש, ערכו שאלות, והפעילו אותו כשמוכנים.</p>
 
+    <!-- שלב 5: גישה מורחבת (תשלום) - רק למשתמש רגיל, לא למנהל-על -->
+    <div id="accessBox" class="access-box" hidden></div>
+
+    <div id="paymentSection" hidden>
+      <p id="paymentStatus" class="sub"></p>
+      <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:0"></iframe>
+    </div>
+
     <form class="create-row" id="createForm">
       <input type="text" id="newGameName" placeholder="שם משחק חדש (לדוגמה: פורים 2026)" required>
       <button type="submit" class="btn gold">צור משחק</button>
@@ -53,6 +61,9 @@ async function init() {
     document.getElementById('createForm').hidden = true;
     document.getElementById('adminSection').hidden = false;
     loadUsers();
+  } else {
+    document.getElementById('accessBox').hidden = false;
+    loadAccessStatus();
   }
   loadGames();
 }
@@ -172,6 +183,102 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/admin/logout', { method: 'POST' });
   location.href = '/';
 });
+
+// ===================================================================
+// שלב 5: גישה מורחבת - תשלום דרך נדרים פלוס (אייפרם, זרימת יצירת עסקה בצד שרת)
+// ===================================================================
+let currentParamId = null;
+let nedarimListenerAttached = false;
+
+async function loadAccessStatus() {
+  const res = await fetch('/payments/my-access');
+  if (!res.ok) return;
+  const data = await res.json();
+  const box = document.getElementById('accessBox');
+  const now = new Date();
+  if (data.paidUntil && new Date(data.paidUntil) > now) {
+    const until = new Date(data.paidUntil).toLocaleString('he-IL');
+    box.innerHTML = `<span class="access-active">✅ גישה מורחבת פעילה עד ${until} (בלי הגבלת 3 המשתתפים)</span>`;
+  } else {
+    box.innerHTML = `
+      <span>גרסת הניסיון מוגבלת ל-3 משתתפים בו-זמנית למשחק.</span>
+      <button class="btn gold" id="buyAccessBtn">רכשו גישה מורחבת - 50 שעות ב-15 ש"ח</button>
+    `;
+    document.getElementById('buyAccessBtn').addEventListener('click', startPayment);
+  }
+}
+
+function ensureNedarimListener() {
+  if (nedarimListenerAttached) return; // חובה לרשום רק פעם אחת - הפעלה כפולה עלולה לגרום לחיוב כפול
+  nedarimListenerAttached = true;
+  window.addEventListener('message', (event) => {
+    if (!event.data || !event.data.Name) return;
+    if (event.data.Name === 'Height') {
+      const frame = document.getElementById('NedarimFrame');
+      if (frame) frame.style.height = (parseInt(event.data.Value, 10) + 15) + 'px';
+    } else if (event.data.Name === 'TransactionResponse') {
+      handleNedarimResponse(event.data.Value);
+    }
+  });
+}
+
+function postNedarim(data) {
+  document.getElementById('NedarimFrame').contentWindow.postMessage(data, '*');
+}
+
+async function startPayment() {
+  const btn = document.getElementById('buyAccessBtn');
+  if (btn) btn.disabled = true;
+
+  const res = await fetch('/payments/create', { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'שגיאה ביצירת עסקה');
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  currentParamId = data.paramId;
+  document.getElementById('paymentSection').hidden = false;
+  document.getElementById('paymentStatus').textContent = 'טוען טופס תשלום מאובטח...';
+
+  ensureNedarimListener();
+  const frame = document.getElementById('NedarimFrame');
+  frame.onload = () => postNedarim({ Name: 'FinishTransaction', Value: data.transactionId });
+  frame.src = 'https://www.matara.pro/nedarimplus/iframe/';
+}
+
+// חשוב: תגובת האייפרם (TransactionResponse) היא לחוויית משתמש בלבד - האישור
+// האמיתי מגיע לשרת שלנו בנפרד (CallBack מאומת). לכן פה רק סוקרים את הסטטוס
+// אצלנו במקום לסמוך על ה-Status שמגיע כאן ישירות.
+async function handleNedarimResponse(value) {
+  if (value.Status === 'Error') {
+    document.getElementById('paymentStatus').textContent = 'שגיאה: ' + (value.Message || 'התשלום לא הושלם');
+    return;
+  }
+
+  document.getElementById('paymentStatus').textContent = 'מאמתים את התשלום מול השרת, נא להמתין...';
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const statusRes = await fetch(`/payments/status/${currentParamId}`);
+      if (!statusRes.ok) continue;
+      const statusData = await statusRes.json();
+      if (statusData.status === 'approved') {
+        document.getElementById('paymentStatus').textContent = '✅ התשלום אושר! הגישה המורחבת פעילה.';
+        document.getElementById('paymentSection').hidden = true;
+        loadAccessStatus();
+        return;
+      }
+      if (statusData.status === 'error') {
+        document.getElementById('paymentStatus').textContent = 'התשלום נכשל.';
+        return;
+      }
+    } catch { /* ממשיכים לנסות */ }
+  }
+  document.getElementById('paymentStatus').textContent =
+    'האישור עדיין לא התקבל מנדרים פלוס - זה יכול לקחת רגע. רעננו את הדף בעוד דקה כדי לבדוק שוב.';
+}
 
 init();
 </script>

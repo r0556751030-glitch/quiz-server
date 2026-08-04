@@ -9,6 +9,7 @@ const yemotRoutes = require('./routes/yemotRoutes');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const gamesRoutes = require('./routes/gamesRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const Player = require('./models/Player');
 const Game = require('./models/Game');
@@ -18,6 +19,9 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/clicker-db';
 
 const app = express();
+// חובה כדי ש-req.ip ישקף את כתובת ה-IP האמיתית של הפונה, לא את כתובת ה-proxy
+// הפנימי של Render - קריטי לאימות מקור ה-CallBack של נדרים פלוס (routes/paymentRoutes.js).
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -71,6 +75,7 @@ app.use('/yemot', yemotRoutes);
 app.use('/admin', authRoutes);
 app.use('/admin', adminRoutes);
 app.use('/games', gamesRoutes);
+app.use('/payments', paymentRoutes);
 
 app.use(express.static('public'));
 

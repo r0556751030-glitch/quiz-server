@@ -14,7 +14,9 @@ const CONFIG = {
     IDLE_STALE_TIMEOUT_MS: 12000,
     OPEN_QUESTION_STALE_BUFFER_MS: 8000,
     SWEEP_INTERVAL_MS: 4000,
-    CODE_ENTRY_TIMEOUT_SECONDS: 20       // זמן המתנה להקשת קוד המשחק (שלב 4) - ערך זמני, לכייל אחרי בדיקה אמיתית
+    CODE_ENTRY_TIMEOUT_SECONDS: 20,      // זמן המתנה להקשת קוד המשחק (שלב 4) - ערך זמני, לכייל אחרי בדיקה אמיתית
+    FREE_TRIAL_MAX_PLAYERS: 3            // שלב 5: מגבלת ניסיון חינמי - עד 3 משתתפים בו-זמנית למשחק,
+                                          // אלא אם לבעל המשחק יש paidUntil עתידי (גישה מורחבת ששולמה)
 };
 
 // gameId (string) -> { activeGame, status, currentQuestion, openedAt, pausedRemainingMs,
