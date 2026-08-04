@@ -14,6 +14,9 @@ const EXTENDED_ACCESS_HOURS = 50;
 
 const NEDARIM_MOSAD = process.env.NEDARIM_MOSAD;
 const NEDARIM_API_VALID = process.env.NEDARIM_API_VALID;
+// אופציונלי - מייל להתראה אם ה-CallBack שלנו נכשל מהצד שלהם. חובה כשעובדים
+// מול מוסד הבדיקות (Mosad=0) של נדרים פלוס.
+const NEDARIM_CALLBACK_ERROR_EMAIL = process.env.NEDARIM_CALLBACK_ERROR_EMAIL;
 // כתובות ה-IP הרשמיות שמהן נדרים פלוס שולחים CallBack - לפי התיעוד הרשמי.
 // חובה ש-server.js יגדיר app.set('trust proxy', ...) אחרת req.ip לא ישקף
 // את הכתובת האמיתית מאחורי ה-proxy של Render.
@@ -55,6 +58,7 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
       Comment: `קעמפ-קליק - גישה מלאה 50 שעות (${req.game.name})`,
       Param1: paramId,
       CallBack: callbackUrl,
+      ...(NEDARIM_CALLBACK_ERROR_EMAIL ? { CallBackMailError: NEDARIM_CALLBACK_ERROR_EMAIL } : {}),
       AjaxId: String(Date.now()) // מומלץ ע"י נדרים - מונע חיוב כפול על תקלת תקשורת
     });
 
