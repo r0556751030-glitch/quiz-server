@@ -101,10 +101,12 @@ async function loadGames() {
     const trialBtn = card.querySelector('[data-act="activate-trial"]');
     const fullBtn = card.querySelector('[data-act="activate-full"]');
     const payBtn = card.querySelector('[data-act="activate-paid"]');
+    const upgradeBtn = card.querySelector('[data-act="upgrade-paid"]');
     const adminBtn = card.querySelector('[data-act="activate"]');
     if (trialBtn) trialBtn.addEventListener('click', () => activate(id));
     if (fullBtn) fullBtn.addEventListener('click', () => activate(id)); // כבר שילם - מפעיל ישירות, בלי תשלום נוסף
-    if (payBtn) payBtn.addEventListener('click', () => openPaymentModal(id));
+    if (payBtn) payBtn.addEventListener('click', () => openPaymentModal(id, false));
+    if (upgradeBtn) upgradeBtn.addEventListener('click', () => openPaymentModal(id, true)); // שדרוג תוך כדי סשן חי - לא נוגע בשחקנים/תשובות
     if (adminBtn) adminBtn.addEventListener('click', () => activate(id));
     card.querySelector('[data-act="deactivate"]').addEventListener('click', () => deactivate(id));
     card.querySelector('[data-act="rename"]').addEventListener('click', () => rename(id, card));
@@ -115,21 +117,35 @@ async function loadGames() {
 // שלב 5: כפתור ה"הפעל" מתפצל לפי מצב התשלום של המשחק הספציפי הזה (התשלום
 // הוא per-game, לא per-account). לא רלוונטי למנהל-על, שרואה תמיד כפתור הפעלה
 // רגיל - וההפעלה שלו ממילא תמיד פותחת גישה מלאה בלי תשלום (ראו gamesRoutes.js).
+// חשוב: אפשרות השדרוג לגישה מלאה קיימת גם כשהמשחק כבר חי על ניסיון חינם - לא
+// רק לפני ההפעלה - כדי שלא "ייעלם" ברגע שהמנחה כבר התחיל עם הניסיון החינמי.
 function renderActivateArea(g) {
-  if (g.isActive) {
-    return `<button class="btn" data-act="activate" disabled>הפעל</button>`;
-  }
   if (myRole !== 'user') {
-    return `<button class="btn" data-act="activate">הפעל</button>`;
+    return `<button class="btn" data-act="activate" ${g.isActive ? 'disabled' : ''}>הפעל</button>`;
+  }
+  if (g.isActive) {
+    if (g.hasExtendedAccess) {
+      return `<button class="btn" data-act="activate" disabled>הפעל</button>`;
+    }
+    // חי כרגע במסלול ניסיון חינם - עדיין אפשר לשדרג לגישה מלאה בלי לאבד את הסשן הרץ
+    return `
+      <button class="btn" data-act="activate" disabled>הפעל</button>
+      <button class="btn gold" data-act="upgrade-paid">שדרג לגישה מלאה · ₪15 · 50 שעות</button>
+    `;
   }
   if (g.hasExtendedAccess) {
     const hoursLeft = g.paidUntil ? Math.max(0, Math.round((new Date(g.paidUntil) - new Date()) / 3600000)) : null;
     const hoursText = hoursLeft !== null ? ` (נותרו כ-${hoursLeft} שעות)` : '';
     return `<button class="btn gold" data-act="activate-full">הפעל משחק מלא${hoursText}</button>`;
   }
+  // שתי האופציות מקובצות ויזואלית יחד (מסגרת אחת + "או" ביניהן), כדי שיהיה
+  // ברור שמדובר בבחירה בין שתי חלופות לאותה פעולה, לא שני כפתורים נפרדים.
   return `
-    <button class="btn" data-act="activate-trial">התחל ניסיון חינם (עד 3 משתתפים)</button>
-    <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪15 · 50 שעות</button>
+    <div class="activate-choice">
+      <button class="btn" data-act="activate-trial">התחל ניסיון חינם (עד 3 משתתפים)</button>
+      <span class="choice-or">או</span>
+      <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪15 · 50 שעות</button>
+    </div>
   `;
 }
 
@@ -140,7 +156,11 @@ async function doActivate(id) {
   return true;
 }
 
-async function activate(id) {
+// שלב 5: אותה אזהרת "פתיחת סשן חדש" חייבת לחול גם על הפעלה מלאה (בתשלום),
+// לא רק על ניסיון חינם - זו אותה פעולת activate() בשרת בדיוק, עם אותן השלכות
+// (מחיקת שחקנים/תשובות מסשן קודם). מיוצא כפונקציה נפרדת כדי שגם openPaymentModal
+// יוכל להשתמש בה לפני שמתחילים בתשלום.
+async function confirmSessionWipe(id) {
   let msg = 'הפעלת המשחק תתחיל סשן חדש: כל הניקוד והסטטיסטיקות מסשנים קודמים של משחק זה יימחקו. להמשיך?';
   try {
     const previewRes = await fetch(`/games/${id}/activate-preview`);
@@ -152,7 +172,11 @@ async function activate(id) {
       }
     }
   } catch { /* אם הבדיקה נכשלת, ממשיכים עם האזהרה הגנרית - לא חוסמים את הפעולה בגלל זה */ }
-  if (!confirm(msg)) return;
+  return confirm(msg);
+}
+
+async function activate(id) {
+  if (!(await confirmSessionWipe(id))) return;
   if (await doActivate(id)) loadGames();
 }
 async function deactivate(id) {
@@ -216,8 +240,15 @@ function handleNedarimMessage(event) {
   }
 }
 
-async function openPaymentModal(gameId) {
-  pendingPayment = { gameId, paramId: null, transactionId: null };
+async function openPaymentModal(gameId, isCurrentlyActive) {
+  // אם המשחק לא חי כרגע - הפעלה שתגיע אחרי התשלום תמחק שחקנים/תשובות מסשן קודם,
+  // בדיוק כמו בניסיון חינם. מציגים את אותה אזהרה *לפני* שגובים תשלום, לא אחריו.
+  // אם המשחק כבר חי (שדרוג תוך כדי סשן) - אין מחיקה בכלל, לא צריך אזהרה.
+  if (!isCurrentlyActive) {
+    if (!(await confirmSessionWipe(gameId))) return;
+  }
+
+  pendingPayment = { gameId, paramId: null, transactionId: null, isCurrentlyActive };
   setPaymentStatus('יוצר עסקה...');
   document.getElementById('paymentPayBtn').disabled = true;
   document.getElementById('paymentOverlay').hidden = false;
@@ -272,14 +303,20 @@ async function onNedarimTransactionResponse(value) {
     return;
   }
   setPaymentStatus('התשלום התקבל, מאמת מול השרת...');
-  const { gameId, paramId } = pendingPayment;
+  const { gameId, paramId, isCurrentlyActive } = pendingPayment;
   const approved = await waitForPaymentApproval(paramId);
   if (!approved) {
     setPaymentStatus('האישור הסופי מתעכב - נסו לרענן בעוד רגע, או פנו לתמיכה אם זה נמשך.');
     return;
   }
-  setPaymentStatus('מאושר! מפעיל את המשחק...');
-  await doActivate(gameId);
+  if (isCurrentlyActive) {
+    // המשחק כבר חי - לא נוגעים בו (לא מפעילים מחדש, לא מוחקים שחקנים/תשובות).
+    // הגישה המלאה כבר פעילה מהרגע שהשרת אישר את התשלום (nedarim-callback).
+    setPaymentStatus('מאושר! הגישה המלאה פעילה כעת על המשחק החי.');
+  } else {
+    setPaymentStatus('מאושר! מפעיל את המשחק...');
+    await doActivate(gameId);
+  }
   closePaymentModal();
   loadGames();
 }

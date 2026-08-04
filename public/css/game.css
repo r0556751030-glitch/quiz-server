@@ -242,6 +242,22 @@ h1 {
 }
 .game-card:hover { border-color: rgba(255,176,46,0.4); }
 
+/* שלב 5: קיבוץ ויזואלי של שתי חלופות ההפעלה (ניסיון חינם / גישה מלאה) - כדי
+   שיהיה ברור שמדובר בבחירה אחת בין שתיים, לא שני כפתורים נפרדים ולא-קשורים. */
+.activate-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-gold);
+  border-radius: 999px;
+}
+.choice-or {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .game-name { flex: 1; min-width: 160px; }
 .view-name {
   font-family: var(--font-display);
