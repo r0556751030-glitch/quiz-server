@@ -200,6 +200,28 @@ html, body {
   color: var(--text);
 }
 
+.header-code-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: clamp(11px, 1.5vh, 13px);
+  font-weight: 600;
+  color: var(--muted);
+  background: rgba(255,176,46,0.08);
+  border: 1px solid rgba(255,176,46,0.25);
+  border-radius: 30px;
+  padding: 4px 14px;
+  white-space: nowrap;
+}
+.header-code-badge strong {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  direction: ltr;
+}
+
 .conn-dot {
   width: 10px;
   height: 10px;

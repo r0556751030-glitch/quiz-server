@@ -889,8 +889,11 @@ async function loadStatus() {
 
   if (s.activeGame) {
     document.getElementById('activeGameName').textContent = '· ' + s.activeGame.name;
+    const code = s.activeGame.code || '----';
     const codeEl = document.getElementById('callCardCode');
-    if (codeEl) codeEl.textContent = s.activeGame.code || '----';
+    if (codeEl) codeEl.textContent = code;
+    const headerCodeEl = document.getElementById('headerCode');
+    if (headerCodeEl) headerCodeEl.textContent = code;
   }
 
   if (s.status === 'displayed' && s.currentQuestion) {
