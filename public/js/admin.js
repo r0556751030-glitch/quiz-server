@@ -30,7 +30,8 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 async function checkAuth() {
   const res = await fetch('/admin/me', { cache: 'no-store' });
   const data = await res.json();
-  if (data.authenticated) onAuthenticated(data.role, data.username);
+  // אחרי
+if (data.authenticated) onAuthenticated(data.role, data.email);
   else location.href = '/';
 }
 

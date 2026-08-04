@@ -30,7 +30,8 @@ router.use(requireAuth);
 // ===== רשימת המשחקים - "שלי" למשתמש רגיל, "כולם" למנהל-על =====
 router.get('/', async (req, res) => {
   const filter = req.auth.role === 'admin' ? {} : { owner: req.auth.userId };
-  const games = await Game.find(filter).sort({ createdAt: -1 }).populate('owner', 'username');
+  // אחרי
+  const games = await Game.find(filter).sort({ createdAt: -1 }).populate('owner', 'email');
   res.json(games.map((g) => ({
     _id: g._id,
     name: g.name,
@@ -38,7 +39,7 @@ router.get('/', async (req, res) => {
     code: g.code,
     isActive: g.isActive,
     createdAt: g.createdAt,
-    ownerUsername: g.owner ? g.owner.username : null
+    ownerEmail: g.owner ? g.owner.email : null
   })));
 });
 
@@ -136,9 +137,10 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
   const counts = await Game.aggregate([{ $group: { _id: '$owner', count: { $sum: 1 } } }]);
   const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
 
+ // אחרי
   res.json(users.map((u) => ({
     _id: u._id,
-    username: u.username,
+    email: u.email,
     isAdmin: u.isAdmin,
     createdAt: u.createdAt,
     gameCount: countMap.get(String(u._id)) || 0

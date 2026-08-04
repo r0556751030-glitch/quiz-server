@@ -70,9 +70,9 @@ document
 
             body:JSON.stringify({
 
-                username:
+                email:
                 document
-                .getElementById('loginUsername')
+                .getElementById('loginEmail')
                 .value
                 .trim(),
 
@@ -130,9 +130,6 @@ document
 
 
 
-
-
-
 document
 .getElementById('registerForm')
 .addEventListener('submit', async (e)=>{
@@ -167,9 +164,9 @@ document
 
             body:JSON.stringify({
 
-                username:
+                email:
                 document
-                .getElementById('regUsername')
+                .getElementById('regEmail')
                 .value
                 .trim(),
 
@@ -251,7 +248,7 @@ fetch('/admin/me')
 });
 
 function showAlreadyLoggedInBar(d) {
-    const label = d.role === 'admin' ? ' מנהל מערכת' : ` ${d.username}`;
+    const label = d.role === 'admin' ? ' מנהל מערכת' : ` ${d.email}`;
 
     const bar = document.createElement('div');
     bar.id = 'alreadyInBar';

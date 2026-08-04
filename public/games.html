@@ -32,7 +32,7 @@
     <div id="adminSection" hidden>
       <h2 class="section-title">כל המשתמשים בפלטפורמה</h2>
       <table class="users-table">
-        <thead><tr><th>שם משתמש</th><th>מספר משחקים</th><th>נרשם בתאריך</th></tr></thead>
+        <thead><tr><th>אימייל</th><th>מספר משחקים</th><th>נרשם בתאריך</th></tr></thead>
         <tbody id="usersTbody"></tbody>
       </table>
     </div>
@@ -46,7 +46,7 @@ async function init() {
   if (!me.authenticated) { location.href = '/'; return; }
   myRole = me.role;
 
-  document.getElementById('whoami').textContent = me.role === 'admin' ? 'מנהל מערכת' : me.username;
+  document.getElementById('whoami').textContent = me.role === 'admin' ? 'מנהל מערכת' : me.email;
   if (me.role === 'admin') {
     document.getElementById('pageTitle').textContent = 'כל המשחקים בפלטפורמה';
     document.getElementById('pageSub').textContent = 'כמנהל מערכת אתה רואה ויכול לנהל את כל המשחקים של כל המשתמשים.';
@@ -71,7 +71,7 @@ async function loadGames() {
     <div class="game-card" data-id="${g._id}">
       <div class="game-name">
         <span class="view-name">${g.name}</span>
-        ${myRole === 'admin' ? `<div class="owner-tag">בעלים: ${g.ownerUsername || '—'}</div>` : ''}
+        ${myRole === 'admin' ? `<div class="owner-tag">בעלים: ${g.ownerEmail || '—'}</div>` : ''}
       </div>
       <div class="game-code-badge" title="קוד המשחק - זה מה שהמתקשרים מקישים כדי להצטרף">
         קוד הצטרפות: <strong>${g.code || '—'}</strong>
@@ -146,7 +146,7 @@ async function loadUsers() {
   const users = await res.json();
   document.getElementById('usersTbody').innerHTML = users.map((u) => `
     <tr>
-      <td>${u.username}</td>
+      <td>${u.email}</td>
       <td>${u.gameCount}</td>
       <td>${new Date(u.createdAt).toLocaleDateString('he-IL')}</td>
     </tr>
