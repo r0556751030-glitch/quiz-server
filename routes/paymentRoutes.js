@@ -90,6 +90,7 @@ router.post('/nedarim-callback', async (req, res) => {
   const sourceIp = req.ip;
   if (!NEDARIM_CALLBACK_IPS.includes(sourceIp)) {
     console.warn(`⚠️ callback מנדרים פלוס מכתובת IP לא מוכרת: "${sourceIp}" - נבדוק trust proxy אם זה קורה תמיד`);
+    console.warn(`⚠️ שרשרת מלאה (x-forwarded-for): "${req.headers['x-forwarded-for'] || '(חסר)'}"`);
     return res.status(200).send('ignored: unrecognized source ip');
   }
 
