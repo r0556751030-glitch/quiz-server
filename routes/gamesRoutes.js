@@ -9,6 +9,10 @@ const Contact = require('../models/Contact');
 const { activateGame, deactivateGame } = require('../game/gameState');
 const { requireAuth, requireAdmin, requireGameOwnership } = require('../middleware/auth');
 
+function roomName(gameId) {
+  return `game:${gameId}`;
+}
+
 function slugify(text) {
   return (text || '').trim().toLowerCase()
     .replace(/[^\u0590-\u05FFa-z0-9]+/g, '-')
@@ -30,7 +34,6 @@ router.use(requireAuth);
 // ===== רשימת המשחקים - "שלי" למשתמש רגיל, "כולם" למנהל-על =====
 router.get('/', async (req, res) => {
   const filter = req.auth.role === 'admin' ? {} : { owner: req.auth.userId };
-  // אחרי
   const games = await Game.find(filter).sort({ createdAt: -1 }).populate('owner', 'email');
   res.json(games.map((g) => ({
     _id: g._id,
@@ -100,8 +103,6 @@ router.get('/:gameId/activate-preview', requireGameOwnership, async (req, res) =
 });
 
 router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
-  // הוסר: Game.updateMany({...}, {isActive:false}) - זה היה האילוץ "רק משחק אחד
-  // חי בכל המערכת". עכשיו כמה משחקים יכולים להיות isActive:true בו-זמנית.
   req.game.isActive = true;
   await req.game.save();
 
@@ -112,11 +113,12 @@ router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
 
   activateGame(req.game);
 
-  // TODO(שלב 4 - המשך): io.emit גלובלי כאן שגוי עכשיו כשכמה משחקים חיים בו-זמנית -
-  // זה ישדר "gameSwitched" לכל הדשבורדים, כולל של משחקים אחרים שלא קשורים בכלל.
-  // צריך socket room ייעודי למשחק הזה (game:<gameId>) - עדיין לא מחובר, ממתין
-  // לעדכון admin.js/admin.html בצעד הבא. בינתיים לא משדרים בכלל, כדי לא לשבור
-  // דשבורדים של משחקים אחרים.
+  // שלב 4 - המשך: משדרים רק ל-room של המשחק הספציפי הזה (game:<gameId>), לא
+  // גלובלית לכל הדשבורדים - כדי לא להשפיע על משחקים אחרים שרצים בו-זמנית.
+  // מכסה את המקרה של re-activation בזמן שדשבורד כבר פתוח על אותו משחק (למשל
+  // אם המנחה מפעיל מחדש מטאב אחר) - הסשן אופס, הדשבורד חייב לרענן.
+  req.app.get('io').to(roomName(req.game._id)).emit('gameActivated', { gameName: req.game.name });
+
   res.json({ success: true });
 });
 
@@ -126,8 +128,11 @@ router.post('/:gameId/deactivate', requireGameOwnership, async (req, res) => {
   await req.game.save();
 
   deactivateGame(req.game._id);
-  // TODO(שלב 4 - המשך): כנ"ל - צריך לשדר 'gameEnded'/סגירה רק ל-room של המשחק הזה,
-  // לא גלובלית לכולם. ממתין לחיבור socket rooms.
+
+  // שלב 4 - המשך: שידור ל-room הספציפי בלבד - מודיע לדשבורד (אם פתוח) שהמשחק
+  // הזה הופסק, כדי שיחזור לרשימת המשחקים במקום להישאר על מסך "מת".
+  req.app.get('io').to(roomName(req.game._id)).emit('gameStopped', {});
+
   res.json({ success: true });
 });
 
@@ -137,7 +142,6 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
   const counts = await Game.aggregate([{ $group: { _id: '$owner', count: { $sum: 1 } } }]);
   const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
 
- // אחרי
   res.json(users.map((u) => ({
     _id: u._id,
     email: u.email,

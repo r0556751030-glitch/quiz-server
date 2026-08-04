@@ -30,12 +30,11 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 async function checkAuth() {
   const res = await fetch('/admin/me', { cache: 'no-store' });
   const data = await res.json();
-  // אחרי
-if (data.authenticated) onAuthenticated(data.role, data.email);
+  if (data.authenticated) onAuthenticated(data.role, data.email);
   else location.href = '/';
 }
 
-function onAuthenticated(role, username) {
+function onAuthenticated(role, email) {
   currentRole = role;
   initApp();
 }
@@ -112,13 +111,18 @@ async function resyncConnectedCount() {
 }
 
 // ===================================================================
-// החלפת משחק פעיל
+// עדכון סטטוס המשחק (שלב 4 - המשך): כל דשבורד מקבל רק אירועים ל-room של
+// המשחק שהוא עצמו מציג (game:<gameId>, ראו socket.emit('joinGame', ...)
+// למעלה) - לא עוד שידור גלובלי שהיה משפיע בטעות על משחקים אחרים.
 // ===================================================================
-socket.on('gameSwitched', (data) => {
-  alert(data.gameName
-    ? 'המשחק הפעיל הוחלף ל: ' + data.gameName + '\nהעמוד ייטען מחדש.'
-    : 'המשחק הופסק.\nהעמוד ייטען מחדש.');
+socket.on('gameActivated', (data) => {
+  alert('המשחק "' + (data.gameName || '') + '" הופעל מחדש (סשן חדש - ניקוד ונתונים קודמים נמחקו).\nהעמוד ייטען מחדש.');
   location.reload();
+});
+
+socket.on('gameStopped', () => {
+  alert('המשחק הופסק.\nחוזרים לרשימת המשחקים.');
+  location.href = '/games.html';
 });
 
 // ===================================================================
