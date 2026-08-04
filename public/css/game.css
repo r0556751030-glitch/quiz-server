@@ -90,14 +90,20 @@ body {
 /* ─── Payment modal (נדרים פלוס) ──────────────────────────── */
 
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10,6,4,0.72);
   display: flex;
   align-items: center;
   justify-content: center;
+  position: fixed;
+  inset: 0;
+  background: rgba(10,6,4,0.72);
   z-index: 100;
   padding: 20px;
+}
+/* חובה: [hidden] וה-class הזה נמצאים באותה רמת specificity (0,0,1,0) - בלי
+   הכלל הזה, display:flex למעלה מנצח את [hidden] של הדפדפן (כי הוא מוגדר
+   אחריו ב-cascade), והמודאל נשאר גלוי תמיד, גם עם ה-attribute hidden. */
+.modal-overlay[hidden] {
+  display: none;
 }
 .modal-box {
   position: relative;
