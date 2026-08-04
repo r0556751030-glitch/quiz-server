@@ -7,6 +7,10 @@ const mongoose = require('mongoose');
 // הלקוח בלבד (ראו תיעוד נדרים פלוס: "אישור שרתי בלבד").
 const paymentSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  // שלב 5 (עדכון): התשלום פותח גישה מלאה למשחק הספציפי הזה בלבד, לא לכל
+  // המשחקים של המשתמש. נשמר גם user (מי שילם, לצורך תמיכה/מעקב) וגם game
+  // (על מה בדיוק פתח גישה).
+  game: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true, index: true },
   // מזהה ייחודי שלנו (לא של נדרים) - נשלח כ-Param1 ביצירת העסקה, וחוזר אלינו
   // ב-CallBack. זו הדרך שבה מצליבים את העדכון שמגיע מנדרים מול הרשומה אצלנו.
   paramId: { type: String, required: true, unique: true },

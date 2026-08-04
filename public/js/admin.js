@@ -6,7 +6,7 @@ let currentRole = null;
 let appInitialized = false;
 let editingQuestionId = null; // מזהה השאלה שנמצאת כרגע בעריכה, או null במצב "הוספת שאלה"
 let maxFreePlayers = 3; // שלב 5: יעודכן מהשרת ב-loadAccessStatus() - ברירת מחדל זהירה בלבד
-let hasExtendedAccess = false; // שלב 5: לפי paidUntil של בעל המשחק (לא בהכרח מי שצופה)
+let hasExtendedAccess = false; // שלב 5: לפי paidUntil של המשחק הספציפי הזה (per-game, לא per-owner) + adminActivated
 
 // שלב 4: כמה משחקים יכולים להיות חיים בו-זמנית - הדשבורד הזה שולט תמיד על
 // משחק ספציפי אחד, שמזוהה מה-URL (games.html מעביר admin.html?gameId=...).

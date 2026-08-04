@@ -3,7 +3,7 @@ const router = express.Router();
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const User = require('../models/User');
+const Game = require('../models/Game');
 const { CONFIG, touch, forget, answerFieldName, getGameState, findGameStateByCode } = require('../game/gameState');
 
 function roomName(gameId) {
@@ -120,13 +120,16 @@ router.post('/api', async (req, res) => {
             }
 
             // שלב 5: מגבלת ניסיון חינמי - עד FREE_TRIAL_MAX_PLAYERS משתתפים בו-זמנית
-            // לכל משחק, אלא אם לבעל המשחק יש paidUntil עתידי (גישה מורחבת ששולמה).
-            // נבדק רק בהצטרפות שחקן **חדש** - שחקן שכבר משתתף וממשיך/מתחבר-מחדש לא
-            // נספר שוב (זה מטופל בענף ה-`else if (!player.active)` למטה, לא כאן).
+            // לכל משחק, אלא אם למשחק הזה ספציפית יש paidUntil עתידי (תשלום הוא
+            // per-game, לא per-user), או שהמשחק הופעל ע"י מנהל-על (adminActivated -
+            // מנהל-על תמיד מפעיל בגישה מלאה, בלי תשלום). נטען טרי מה-DB בכל בדיקה
+            // ולא מה-snapshot בזיכרון, כי תשלום יכול להתאשר (callback אסינכרוני)
+            // אחרי שהמשחק כבר הופעל. נבדק רק בהצטרפות שחקן **חדש** - שחקן שכבר
+            // משתתף וממשיך/מתחבר-מחדש לא נספר שוב (מטופל ב-`else if (!player.active)` למטה).
             const activeCount = await Player.countDocuments({ game: gameId, active: true });
             if (activeCount >= CONFIG.FREE_TRIAL_MAX_PLAYERS) {
-                const owner = await User.findById(gs.activeGame.owner).select('paidUntil');
-                const hasExtendedAccess = owner && owner.paidUntil && owner.paidUntil > new Date();
+                const game = await Game.findById(gameId).select('paidUntil adminActivated');
+                const hasExtendedAccess = !!(game && ((game.paidUntil && game.paidUntil > new Date()) || game.adminActivated));
                 if (!hasExtendedAccess) {
                     forget(callId);
                     return sendOut('trial-limit-reached', `id_list_message=t-המשחק הגיע למגבלת ${CONFIG.FREE_TRIAL_MAX_PLAYERS} משתתפים בגרסת הניסיון, אנא נסו שוב מאוחר יותר`);

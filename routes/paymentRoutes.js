@@ -2,13 +2,13 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const Payment = require('../models/Payment');
-const User = require('../models/User');
-const { requireAuth } = require('../middleware/auth');
+const Game = require('../models/Game');
+const { requireAuth, requireGameOwnership } = require('../middleware/auth');
 
 // ===== הגדרות תשלום - שלב 5 =====
 // לפי סיכום עם המשתמש: 15 ש"ח פותחים 50 שעות (זמן קלנדרי מרגע התשלום, לא
-// שעות שימוש בפועל) של גישה מורחבת בלי מגבלת 3 המשתתפים - ברמת המשתמש/חשבון,
-// לכל המשחקים שלו (לא per-game).
+// שעות שימוש בפועל) של גישה מורחבת בלי מגבלת 3 המשתתפים - per-game (על
+// המשחק הספציפי הזה בלבד, לא על כל המשחקים של המשתמש).
 const PAYMENT_AMOUNT_ILS = 15;
 const EXTENDED_ACCESS_HOURS = 50;
 
@@ -21,9 +21,12 @@ const NEDARIM_CALLBACK_IPS = ['18.196.146.117', '18.194.219.73'];
 
 // ===== שלב 1: יצירת עסקה בצד השרת (הזרימה המומלצת בתיעוד נדרים פלוס - =====
 // הסכום נקבע כאן בשרת ולא ניתן לשינוי בצד הלקוח, בניגוד לזרימת FinishTransaction2)
-router.post('/create', requireAuth, async (req, res) => {
+// gameId חובה בגוף הבקשה - התשלום פותח גישה מלאה למשחק הזה בלבד. requireGameOwnership
+// מוודא שהמשחק אכן שייך למי ששולח את הבקשה (או שהוא מנהל-על, אבל מנהל-על ממילא
+// לא צריך לשלם - ראו הבדיקה למטה).
+router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, res) => {
   if (req.auth.role !== 'user') {
-    return res.status(400).json({ error: 'רק משתמש רגיל יכול לרכוש גישה מורחבת' });
+    return res.status(400).json({ error: 'רק משתמש רגיל יכול לרכוש גישה מורחבת - למנהל-על יש גישה מלאה בלי תשלום' });
   }
   if (!NEDARIM_MOSAD || !NEDARIM_API_VALID) {
     console.error('❌ חסרים משתני סביבה NEDARIM_MOSAD / NEDARIM_API_VALID');
@@ -31,7 +34,13 @@ router.post('/create', requireAuth, async (req, res) => {
   }
 
   const paramId = crypto.randomUUID();
-  const payment = await Payment.create({ user: req.auth.userId, paramId, amount: PAYMENT_AMOUNT_ILS, status: 'pending' });
+  const payment = await Payment.create({
+    user: req.auth.userId,
+    game: req.game._id,
+    paramId,
+    amount: PAYMENT_AMOUNT_ILS,
+    status: 'pending'
+  });
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/payments/nedarim-callback`;
 
@@ -43,7 +52,7 @@ router.post('/create', requireAuth, async (req, res) => {
       Amount: String(PAYMENT_AMOUNT_ILS),
       Currency: '1',
       Tashlumim: '1',
-      Comment: 'קעמפ-קליק - גישה מורחבת 50 שעות',
+      Comment: `קעמפ-קליק - גישה מלאה 50 שעות (${req.game.name})`,
       Param1: paramId,
       CallBack: callbackUrl,
       AjaxId: String(Date.now()) // מומלץ ע"י נדרים - מונע חיוב כפול על תקלת תקשורת
@@ -111,12 +120,16 @@ router.post('/nedarim-callback', async (req, res) => {
     payment.approvedAt = new Date();
     await payment.save();
 
-    const user = await User.findById(payment.user);
-    if (user) {
-      const base = (user.paidUntil && user.paidUntil > new Date()) ? user.paidUntil : new Date();
-      user.paidUntil = new Date(base.getTime() + EXTENDED_ACCESS_HOURS * 60 * 60 * 1000);
-      await user.save();
-      console.log(`✅ תשלום אושר: user=${user.email} paidUntil=${user.paidUntil.toISOString()}`);
+    // שלב 5 (עדכון): הגישה המורחבת נפתחת על המשחק הספציפי (payment.game),
+    // לא על כל המשחקים של המשתמש.
+    const game = await Game.findById(payment.game);
+    if (game) {
+      const base = (game.paidUntil && game.paidUntil > new Date()) ? game.paidUntil : new Date();
+      game.paidUntil = new Date(base.getTime() + EXTENDED_ACCESS_HOURS * 60 * 60 * 1000);
+      await game.save();
+      console.log(`✅ תשלום אושר: game="${game.name}" (${game._id}) paidUntil=${game.paidUntil.toISOString()}`);
+    } else {
+      console.warn(`⚠️ callback אושר אבל המשחק המקושר (${payment.game}) לא נמצא - יתכן שנמחק`);
     }
 
     res.status(200).send('ok');
@@ -132,13 +145,6 @@ router.get('/status/:paramId', requireAuth, async (req, res) => {
   const payment = await Payment.findOne({ paramId: req.params.paramId, user: req.auth.userId });
   if (!payment) return res.status(404).json({ error: 'לא נמצא' });
   res.json({ status: payment.status });
-});
-
-// ===== סטטוס הגישה הנוכחי של המשתמש המחובר - להצגה ב-games.html =====
-router.get('/my-access', requireAuth, async (req, res) => {
-  if (req.auth.role !== 'user') return res.json({ paidUntil: null });
-  const user = await User.findById(req.auth.userId).select('paidUntil');
-  res.json({ paidUntil: user ? user.paidUntil : null });
 });
 
 module.exports = router;

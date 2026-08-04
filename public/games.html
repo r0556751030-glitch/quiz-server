@@ -51,7 +51,6 @@
 
 <script>
 let myRole = null;
-let myPaidUntil = null; // שלב 5: Date אם למשתמש יש גישה מורחבת פעילה, אחרת null
 
 async function init() {
   const me = await (await fetch('/admin/me')).json();
@@ -65,20 +64,8 @@ async function init() {
     document.getElementById('createForm').hidden = true;
     document.getElementById('adminSection').hidden = false;
     loadUsers();
-  } else {
-    await refreshAccess();
   }
   loadGames();
-}
-
-async function refreshAccess() {
-  try {
-    const res = await fetch('/payments/my-access');
-    const data = await res.json();
-    myPaidUntil = data.paidUntil ? new Date(data.paidUntil) : null;
-  } catch {
-    myPaidUntil = null;
-  }
 }
 
 async function loadGames() {
@@ -125,8 +112,9 @@ async function loadGames() {
   });
 }
 
-// שלב 5: כפתור ה"הפעל" מתפצל לפי מצב התשלום של המשתמש (לא רלוונטי למנהל-על,
-// שרואה תמיד כפתור הפעלה רגיל - הוא לא זה שמשלם על המשחקים של אחרים).
+// שלב 5: כפתור ה"הפעל" מתפצל לפי מצב התשלום של המשחק הספציפי הזה (התשלום
+// הוא per-game, לא per-account). לא רלוונטי למנהל-על, שרואה תמיד כפתור הפעלה
+// רגיל - וההפעלה שלו ממילא תמיד פותחת גישה מלאה בלי תשלום (ראו gamesRoutes.js).
 function renderActivateArea(g) {
   if (g.isActive) {
     return `<button class="btn" data-act="activate" disabled>הפעל</button>`;
@@ -134,9 +122,10 @@ function renderActivateArea(g) {
   if (myRole !== 'user') {
     return `<button class="btn" data-act="activate">הפעל</button>`;
   }
-  if (myPaidUntil && myPaidUntil > new Date()) {
-    const hoursLeft = Math.max(0, Math.round((myPaidUntil - new Date()) / 3600000));
-    return `<button class="btn gold" data-act="activate-full">הפעל משחק מלא (נותרו כ-${hoursLeft} שעות)</button>`;
+  if (g.hasExtendedAccess) {
+    const hoursLeft = g.paidUntil ? Math.max(0, Math.round((new Date(g.paidUntil) - new Date()) / 3600000)) : null;
+    const hoursText = hoursLeft !== null ? ` (נותרו כ-${hoursLeft} שעות)` : '';
+    return `<button class="btn gold" data-act="activate-full">הפעל משחק מלא${hoursText}</button>`;
   }
   return `
     <button class="btn" data-act="activate-trial">התחל ניסיון חינם (עד 3 משתתפים)</button>
@@ -235,7 +224,7 @@ async function openPaymentModal(gameId) {
   initNedarimFrameOnce();
 
   try {
-    const res = await fetch('/payments/create', { method: 'POST' });
+    const res = await fetch(`/payments/${gameId}/create`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok || !data.success) {
       setPaymentStatus(data.error || 'שגיאה ביצירת עסקה, נסו שוב');
@@ -290,7 +279,6 @@ async function onNedarimTransactionResponse(value) {
     return;
   }
   setPaymentStatus('מאושר! מפעיל את המשחק...');
-  await refreshAccess();
   await doActivate(gameId);
   closePaymentModal();
   loadGames();

@@ -35,15 +35,21 @@ router.use(requireAuth);
 router.get('/', async (req, res) => {
   const filter = req.auth.role === 'admin' ? {} : { owner: req.auth.userId };
   const games = await Game.find(filter).sort({ createdAt: -1 }).populate('owner', 'email');
-  res.json(games.map((g) => ({
-    _id: g._id,
-    name: g.name,
-    slug: g.slug,
-    code: g.code,
-    isActive: g.isActive,
-    createdAt: g.createdAt,
-    ownerEmail: g.owner ? g.owner.email : null
-  })));
+  res.json(games.map((g) => {
+    const hasExtendedAccess = !!(g.paidUntil && g.paidUntil > new Date());
+    return {
+      _id: g._id,
+      name: g.name,
+      slug: g.slug,
+      code: g.code,
+      isActive: g.isActive,
+      createdAt: g.createdAt,
+      ownerEmail: g.owner ? g.owner.email : null,
+      paidUntil: g.paidUntil,
+      hasExtendedAccess,
+      maxFreePlayers: CONFIG.FREE_TRIAL_MAX_PLAYERS
+    };
+  }));
 });
 
 // ===== יצירת משחק חדש - תמיד שייך למשתמש המחובר =====
@@ -104,6 +110,10 @@ router.get('/:gameId/activate-preview', requireGameOwnership, async (req, res) =
 
 router.post('/:gameId/activate', requireGameOwnership, async (req, res) => {
   req.game.isActive = true;
+  // שלב 5: מנהל-על תמיד מפעיל בגישה מלאה בלי תשלום. מתעדכן בכל activate() לפי
+  // מי שביצע אותו הפעם - אם המשתמש הרגיל (הבעלים) מפעיל בעצמו, זה מתאפס בחזרה
+  // ל-false והגישה חוזרת להיות תלויה ב-paidUntil כרגיל.
+  req.game.adminActivated = (req.auth.role === 'admin');
   await req.game.save();
 
   await Promise.all([
@@ -136,16 +146,15 @@ router.post('/:gameId/deactivate', requireGameOwnership, async (req, res) => {
   res.json({ success: true });
 });
 
-// ===== שלב 5: סטטוס גישה (חינם/בתשלום) של המשחק - לפי בעל המשחק, לא לפי מי =====
-// שצופה. חשוב במיוחד למנהל-על שצופה במסך חי של משחק ששייך למשתמש אחר - המגבלה
-// היא של הבעלים, לא של המנהל. נועד להצגה ב-admin.html (מסך חי משותף).
+// ===== שלב 5: סטטוס גישה (חינם/בתשלום) של המשחק - per-game, ומשקף גם =====
+// הפעלה ע"י מנהל-על (adminActivated). נועד להצגה ב-admin.html (מסך חי משותף) -
+// שם רוצים לדעת מה המצב האמיתי של הסשן הנוכחי.
 router.get('/:gameId/access-status', requireGameOwnership, async (req, res) => {
-  const owner = await User.findById(req.game.owner).select('paidUntil');
-  const hasExtendedAccess = !!(owner && owner.paidUntil && owner.paidUntil > new Date());
+  const hasExtendedAccess = !!(req.game.adminActivated || (req.game.paidUntil && req.game.paidUntil > new Date()));
   res.json({
     maxFreePlayers: CONFIG.FREE_TRIAL_MAX_PLAYERS,
     hasExtendedAccess,
-    paidUntil: owner ? owner.paidUntil : null
+    paidUntil: req.game.paidUntil
   });
 });
 
