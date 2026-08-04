@@ -181,6 +181,26 @@ html, body {
   letter-spacing: 0.02em;
 }
 
+.access-badge {
+  font-family: var(--font-body);
+  font-size: clamp(11px, 1.6vh, 13px);
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.access-badge:empty { display: none; }
+.access-badge.trial {
+  color: var(--stage-sapphire);
+  background: rgba(63,127,194,0.14);
+  border: 1px solid rgba(63,127,194,0.4);
+}
+.access-badge.full {
+  color: var(--gold-light);
+  background: rgba(255,176,46,0.14);
+  border: 1px solid var(--border-gold);
+}
+
 .last-joined {
   display: flex;
   align-items: center;

@@ -44,7 +44,7 @@
       <h2>רכישת גישה מלאה</h2>
       <p class="modal-sub">₪15 · 50 שעות גישה מלאה לכל המשחקים שלך, בלי מגבלת 3 המשתתפים</p>
       <div class="payment-status" id="paymentStatus"></div>
-      <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:0"></iframe>
+      <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:420px"></iframe>
       <button class="btn gold" id="paymentPayBtn" type="button" disabled>בצע תשלום</button>
     </div>
   </div>
@@ -204,16 +204,22 @@ function initNedarimFrameOnce() {
   if (nedarimFrame) return;
   nedarimFrame = document.getElementById('NedarimFrame');
   window.addEventListener('message', handleNedarimMessage);
-  nedarimFrame.onload = () => postNedarim({ Name: 'GetHeight' });
+  nedarimFrame.onload = () => {
+    console.log('[נדרים פלוס] האייפרם נטען, שולח GetHeight');
+    postNedarim({ Name: 'GetHeight' });
+  };
   nedarimFrame.src = 'https://www.matara.pro/nedarimplus/iframe/';
 }
 
 function postNedarim(data) {
+  console.log('[נדרים פלוס] שולח לאייפרם:', data);
   nedarimFrame.contentWindow.postMessage(data, '*');
 }
 
 function handleNedarimMessage(event) {
   const msg = event.data || {};
+  if (!msg.Name) return; // הודעות message אחרות שלא קשורות לנדרים - מתעלמים
+  console.log('[נדרים פלוס] התקבלה הודעה:', msg);
   if (msg.Name === 'Height') {
     nedarimFrame.style.height = (parseInt(msg.Value, 10) + 15) + 'px';
   } else if (msg.Name === 'TransactionResponse') {
@@ -222,11 +228,11 @@ function handleNedarimMessage(event) {
 }
 
 async function openPaymentModal(gameId) {
-  initNedarimFrameOnce();
   pendingPayment = { gameId, paramId: null, transactionId: null };
   setPaymentStatus('יוצר עסקה...');
   document.getElementById('paymentPayBtn').disabled = true;
   document.getElementById('paymentOverlay').hidden = false;
+  initNedarimFrameOnce();
 
   try {
     const res = await fetch('/payments/create', { method: 'POST' });
@@ -254,7 +260,11 @@ function closePaymentModal() {
 }
 
 document.getElementById('paymentPayBtn').addEventListener('click', () => {
-  if (!pendingPayment || !pendingPayment.transactionId) return;
+  console.log('[נדרים פלוס] נלחץ "בצע תשלום", pendingPayment:', pendingPayment);
+  if (!pendingPayment || !pendingPayment.transactionId) {
+    setPaymentStatus('העסקה עדיין לא מוכנה - נסו שוב בעוד רגע');
+    return;
+  }
   document.getElementById('paymentPayBtn').disabled = true; // מניעת לחיצה כפולה - לפי המלצת נדרים פלוס
   setPaymentStatus('מעבד תשלום...');
   postNedarim({ Name: 'FinishTransaction', Value: pendingPayment.transactionId });

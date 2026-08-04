@@ -5,6 +5,8 @@ let countdownInterval = null;
 let currentRole = null;
 let appInitialized = false;
 let editingQuestionId = null; // מזהה השאלה שנמצאת כרגע בעריכה, או null במצב "הוספת שאלה"
+let maxFreePlayers = 3; // שלב 5: יעודכן מהשרת ב-loadAccessStatus() - ברירת מחדל זהירה בלבד
+let hasExtendedAccess = false; // שלב 5: לפי paidUntil של בעל המשחק (לא בהכרח מי שצופה)
 
 // שלב 4: כמה משחקים יכולים להיות חיים בו-זמנית - הדשבורד הזה שולט תמיד על
 // משחק ספציפי אחד, שמזוהה מה-URL (games.html מעביר admin.html?gameId=...).
@@ -30,11 +32,11 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 async function checkAuth() {
   const res = await fetch('/admin/me', { cache: 'no-store' });
   const data = await res.json();
-  if (data.authenticated) onAuthenticated(data.role, data.email);
+  if (data.authenticated) onAuthenticated(data.role, data.username);
   else location.href = '/';
 }
 
-function onAuthenticated(role, email) {
+function onAuthenticated(role, username) {
   currentRole = role;
   initApp();
 }
@@ -60,6 +62,21 @@ function initApp() {
   updateNavButtons(false, false);
   loadQuestions();
   loadStatus();
+  loadAccessStatus();
+}
+
+// שלב 5: סטטוס ניסיון-חינם/גישה-מלאה - לפי בעל המשחק (לא לפי מי שצופה, חשוב
+// כשמנהל-על צופה במשחק ששייך למשתמש אחר). נטען פעם אחת בעליית המסך - מספיק
+// בקנה המידה של הפרויקט הזה (עד ~20 לקוחות), אין צורך בעדכון חי בזמן אמת.
+async function loadAccessStatus() {
+  try {
+    const res = await authFetch(`/games/${GAME_ID}/access-status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    maxFreePlayers = data.maxFreePlayers;
+    hasExtendedAccess = data.hasExtendedAccess;
+    updateConnectedCount();
+  } catch { /* אם זה נכשל, פשוט לא מציגים תג מגבלה - לא חוסמים את שאר המסך */ }
 }
 
 checkAuth();
@@ -85,6 +102,13 @@ socket.on('playerDisconnected', (p) => {
 });
 function updateConnectedCount() {
   document.getElementById('connectedCount').textContent = activeCallIds.size;
+  const capEl = document.getElementById('capSuffix');
+  const badgeEl = document.getElementById('accessBadge');
+  if (capEl) capEl.textContent = hasExtendedAccess ? '' : `/${maxFreePlayers}`;
+  if (badgeEl) {
+    badgeEl.textContent = hasExtendedAccess ? 'גישה מלאה' : 'ניסיון חינם';
+    badgeEl.className = 'access-badge ' + (hasExtendedAccess ? 'full' : 'trial');
+  }
 }
 // פאנל "מחוברים כרגע" נטען פעם אחת בלחיצת טאב - זה גרם לו להיות "קפוא" עד
 // שהמנחה עוזב ושב לטאב. עכשיו הוא מתרענן גם באירוע חי, אבל רק אם הטאב פתוח כרגע -
@@ -111,18 +135,13 @@ async function resyncConnectedCount() {
 }
 
 // ===================================================================
-// עדכון סטטוס המשחק (שלב 4 - המשך): כל דשבורד מקבל רק אירועים ל-room של
-// המשחק שהוא עצמו מציג (game:<gameId>, ראו socket.emit('joinGame', ...)
-// למעלה) - לא עוד שידור גלובלי שהיה משפיע בטעות על משחקים אחרים.
+// החלפת משחק פעיל
 // ===================================================================
-socket.on('gameActivated', (data) => {
-  alert('המשחק "' + (data.gameName || '') + '" הופעל מחדש (סשן חדש - ניקוד ונתונים קודמים נמחקו).\nהעמוד ייטען מחדש.');
+socket.on('gameSwitched', (data) => {
+  alert(data.gameName
+    ? 'המשחק הפעיל הוחלף ל: ' + data.gameName + '\nהעמוד ייטען מחדש.'
+    : 'המשחק הופסק.\nהעמוד ייטען מחדש.');
   location.reload();
-});
-
-socket.on('gameStopped', () => {
-  alert('המשחק הופסק.\nחוזרים לרשימת המשחקים.');
-  location.href = '/games.html';
 });
 
 // ===================================================================

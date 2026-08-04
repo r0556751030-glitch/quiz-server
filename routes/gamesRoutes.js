@@ -6,7 +6,7 @@ const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
 const Contact = require('../models/Contact');
-const { activateGame, deactivateGame } = require('../game/gameState');
+const { activateGame, deactivateGame, CONFIG } = require('../game/gameState');
 const { requireAuth, requireAdmin, requireGameOwnership } = require('../middleware/auth');
 
 function roomName(gameId) {
@@ -134,6 +134,19 @@ router.post('/:gameId/deactivate', requireGameOwnership, async (req, res) => {
   req.app.get('io').to(roomName(req.game._id)).emit('gameStopped', {});
 
   res.json({ success: true });
+});
+
+// ===== שלב 5: סטטוס גישה (חינם/בתשלום) של המשחק - לפי בעל המשחק, לא לפי מי =====
+// שצופה. חשוב במיוחד למנהל-על שצופה במסך חי של משחק ששייך למשתמש אחר - המגבלה
+// היא של הבעלים, לא של המנהל. נועד להצגה ב-admin.html (מסך חי משותף).
+router.get('/:gameId/access-status', requireGameOwnership, async (req, res) => {
+  const owner = await User.findById(req.game.owner).select('paidUntil');
+  const hasExtendedAccess = !!(owner && owner.paidUntil && owner.paidUntil > new Date());
+  res.json({
+    maxFreePlayers: CONFIG.FREE_TRIAL_MAX_PLAYERS,
+    hasExtendedAccess,
+    paidUntil: owner ? owner.paidUntil : null
+  });
 });
 
 // ===== מנהל-על בלבד: רשימת כל המשתמשים בפלטפורמה =====
