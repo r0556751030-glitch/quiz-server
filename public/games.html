@@ -22,14 +22,6 @@
     <h1 id="pageTitle">המשחקים שלי</h1>
     <p class="sub" id="pageSub">צרו משחק חדש, ערכו שאלות, והפעילו אותו כשמוכנים.</p>
 
-    <!-- שלב 5: גישה מורחבת (תשלום) - רק למשתמש רגיל, לא למנהל-על -->
-    <div id="accessBox" class="access-box" hidden></div>
-
-    <div id="paymentSection" hidden>
-      <p id="paymentStatus" class="sub"></p>
-      <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:0"></iframe>
-    </div>
-
     <form class="create-row" id="createForm">
       <input type="text" id="newGameName" placeholder="שם משחק חדש (לדוגמה: פורים 2026)" required>
       <button type="submit" class="btn gold">צור משחק</button>
@@ -46,8 +38,20 @@
     </div>
   </main>
 
+  <div id="paymentOverlay" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <button class="modal-close" id="paymentCloseBtn" type="button">✕</button>
+      <h2>רכישת גישה מלאה</h2>
+      <p class="modal-sub">₪15 · 50 שעות גישה מלאה לכל המשחקים שלך, בלי מגבלת 3 המשתתפים</p>
+      <div class="payment-status" id="paymentStatus"></div>
+      <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:0"></iframe>
+      <button class="btn gold" id="paymentPayBtn" type="button" disabled>בצע תשלום</button>
+    </div>
+  </div>
+
 <script>
 let myRole = null;
+let myPaidUntil = null; // שלב 5: Date אם למשתמש יש גישה מורחבת פעילה, אחרת null
 
 async function init() {
   const me = await (await fetch('/admin/me')).json();
@@ -62,10 +66,19 @@ async function init() {
     document.getElementById('adminSection').hidden = false;
     loadUsers();
   } else {
-    document.getElementById('accessBox').hidden = false;
-    loadAccessStatus();
+    await refreshAccess();
   }
   loadGames();
+}
+
+async function refreshAccess() {
+  try {
+    const res = await fetch('/payments/my-access');
+    const data = await res.json();
+    myPaidUntil = data.paidUntil ? new Date(data.paidUntil) : null;
+  } catch {
+    myPaidUntil = null;
+  }
 }
 
 async function loadGames() {
@@ -89,7 +102,7 @@ async function loadGames() {
       </div>
       <span class="status-pill ${g.isActive ? 'live' : 'off'}">${g.isActive ? 'חי כרגע' : 'לא פעיל'}</span>
       ${g.isActive ? `<button class="btn gold" onclick="location.href='/admin.html?gameId=${g._id}'">פתח מסך חי</button>` : ''}
-      <button class="btn" data-act="activate" ${g.isActive ? 'disabled' : ''}>הפעל</button>
+      ${renderActivateArea(g)}
       <button class="btn" data-act="deactivate" ${g.isActive ? '' : 'disabled'}>הפסק</button>
       <button class="btn" data-act="rename">שנה שם</button>
       <button class="btn danger" data-act="delete" ${g.isActive ? 'disabled' : ''}>מחק</button>
@@ -98,11 +111,44 @@ async function loadGames() {
 
   list.querySelectorAll('.game-card').forEach((card) => {
     const id = card.dataset.id;
-    card.querySelector('[data-act="activate"]').addEventListener('click', () => activate(id));
+    const trialBtn = card.querySelector('[data-act="activate-trial"]');
+    const fullBtn = card.querySelector('[data-act="activate-full"]');
+    const payBtn = card.querySelector('[data-act="activate-paid"]');
+    const adminBtn = card.querySelector('[data-act="activate"]');
+    if (trialBtn) trialBtn.addEventListener('click', () => activate(id));
+    if (fullBtn) fullBtn.addEventListener('click', () => activate(id)); // כבר שילם - מפעיל ישירות, בלי תשלום נוסף
+    if (payBtn) payBtn.addEventListener('click', () => openPaymentModal(id));
+    if (adminBtn) adminBtn.addEventListener('click', () => activate(id));
     card.querySelector('[data-act="deactivate"]').addEventListener('click', () => deactivate(id));
     card.querySelector('[data-act="rename"]').addEventListener('click', () => rename(id, card));
     card.querySelector('[data-act="delete"]').addEventListener('click', () => del(id));
   });
+}
+
+// שלב 5: כפתור ה"הפעל" מתפצל לפי מצב התשלום של המשתמש (לא רלוונטי למנהל-על,
+// שרואה תמיד כפתור הפעלה רגיל - הוא לא זה שמשלם על המשחקים של אחרים).
+function renderActivateArea(g) {
+  if (g.isActive) {
+    return `<button class="btn" data-act="activate" disabled>הפעל</button>`;
+  }
+  if (myRole !== 'user') {
+    return `<button class="btn" data-act="activate">הפעל</button>`;
+  }
+  if (myPaidUntil && myPaidUntil > new Date()) {
+    const hoursLeft = Math.max(0, Math.round((myPaidUntil - new Date()) / 3600000));
+    return `<button class="btn gold" data-act="activate-full">הפעל משחק מלא (נותרו כ-${hoursLeft} שעות)</button>`;
+  }
+  return `
+    <button class="btn" data-act="activate-trial">התחל ניסיון חינם (עד 3 משתתפים)</button>
+    <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪15 · 50 שעות</button>
+  `;
+}
+
+async function doActivate(id) {
+  const res = await fetch(`/games/${id}/activate`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'שגיאה בהפעלת המשחק'); return false; }
+  return true;
 }
 
 async function activate(id) {
@@ -118,10 +164,7 @@ async function activate(id) {
     }
   } catch { /* אם הבדיקה נכשלת, ממשיכים עם האזהרה הגנרית - לא חוסמים את הפעולה בגלל זה */ }
   if (!confirm(msg)) return;
-  const res = await fetch(`/games/${id}/activate`, { method: 'POST' });
-  const data = await res.json();
-  if (!res.ok) { alert(data.error || 'שגיאה בהפעלת המשחק'); return; }
-  loadGames();
+  if (await doActivate(id)) loadGames();
 }
 async function deactivate(id) {
   await fetch(`/games/${id}/deactivate`, { method: 'POST' });
@@ -149,6 +192,111 @@ async function del(id) {
   const data = await res.json();
   if (!res.ok) { alert(data.error || 'שגיאה במחיקה'); return; }
   loadGames();
+}
+
+// ===== שלב 5: אינטגרציית נדרים פלוס (זרימת "הקמת עסקה בצד שרת") =====
+// לפי תיעוד נדרים פלוס: יש לרשום את מאזין ה-message ולטעון את ה-src של
+// האייפרם פעם אחת בלבד בחיי הדף - הפעלה כפולה עלולה לגרום לחיוב כפול.
+let nedarimFrame = null;
+let pendingPayment = null; // { gameId, paramId, transactionId }
+
+function initNedarimFrameOnce() {
+  if (nedarimFrame) return;
+  nedarimFrame = document.getElementById('NedarimFrame');
+  window.addEventListener('message', handleNedarimMessage);
+  nedarimFrame.onload = () => postNedarim({ Name: 'GetHeight' });
+  nedarimFrame.src = 'https://www.matara.pro/nedarimplus/iframe/';
+}
+
+function postNedarim(data) {
+  nedarimFrame.contentWindow.postMessage(data, '*');
+}
+
+function handleNedarimMessage(event) {
+  const msg = event.data || {};
+  if (msg.Name === 'Height') {
+    nedarimFrame.style.height = (parseInt(msg.Value, 10) + 15) + 'px';
+  } else if (msg.Name === 'TransactionResponse') {
+    onNedarimTransactionResponse(msg.Value || {});
+  }
+}
+
+async function openPaymentModal(gameId) {
+  initNedarimFrameOnce();
+  pendingPayment = { gameId, paramId: null, transactionId: null };
+  setPaymentStatus('יוצר עסקה...');
+  document.getElementById('paymentPayBtn').disabled = true;
+  document.getElementById('paymentOverlay').hidden = false;
+
+  try {
+    const res = await fetch('/payments/create', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      setPaymentStatus(data.error || 'שגיאה ביצירת עסקה, נסו שוב');
+      return;
+    }
+    pendingPayment.paramId = data.paramId;
+    pendingPayment.transactionId = data.transactionId;
+    setPaymentStatus('מלאו את פרטי הכרטיס למטה ולחצו "בצע תשלום"');
+    document.getElementById('paymentPayBtn').disabled = false;
+  } catch {
+    setPaymentStatus('שגיאת תקשורת - נסו שוב');
+  }
+}
+
+function setPaymentStatus(text) {
+  document.getElementById('paymentStatus').textContent = text;
+}
+
+function closePaymentModal() {
+  document.getElementById('paymentOverlay').hidden = true;
+  pendingPayment = null;
+}
+
+document.getElementById('paymentPayBtn').addEventListener('click', () => {
+  if (!pendingPayment || !pendingPayment.transactionId) return;
+  document.getElementById('paymentPayBtn').disabled = true; // מניעת לחיצה כפולה - לפי המלצת נדרים פלוס
+  setPaymentStatus('מעבד תשלום...');
+  postNedarim({ Name: 'FinishTransaction', Value: pendingPayment.transactionId });
+});
+
+document.getElementById('paymentCloseBtn').addEventListener('click', closePaymentModal);
+
+// חשוב: Status: OK כאן מגיע מהדפדפן של הגולש ואינו אישור סופי (ניתן לזיוף).
+// האישור האמיתי היחיד הוא ה-callback השרתי (routes/paymentRoutes.js). לכן
+// מחכים כאן לאישור מהשרת שלנו (polling על /payments/status) ורק אז ממשיכים.
+async function onNedarimTransactionResponse(value) {
+  if (!pendingPayment) return;
+  if (value.Status !== 'OK') {
+    setPaymentStatus(value.Message || 'התשלום נכשל, נסו שוב');
+    document.getElementById('paymentPayBtn').disabled = false;
+    return;
+  }
+  setPaymentStatus('התשלום התקבל, מאמת מול השרת...');
+  const { gameId, paramId } = pendingPayment;
+  const approved = await waitForPaymentApproval(paramId);
+  if (!approved) {
+    setPaymentStatus('האישור הסופי מתעכב - נסו לרענן בעוד רגע, או פנו לתמיכה אם זה נמשך.');
+    return;
+  }
+  setPaymentStatus('מאושר! מפעיל את המשחק...');
+  await refreshAccess();
+  await doActivate(gameId);
+  closePaymentModal();
+  loadGames();
+}
+
+async function waitForPaymentApproval(paramId) {
+  for (let i = 0; i < 15; i++) { // עד כ-30 שניות
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const res = await fetch(`/payments/status/${paramId}`);
+      const data = await res.json();
+      if (data.status === 'approved') return true;
+      if (data.status === 'error') return false;
+    } catch { /* תקלת רשת זמנית - ננסה שוב בסבב הבא */ }
+  }
+  return false;
 }
 
 async function loadUsers() {
@@ -183,102 +331,6 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/admin/logout', { method: 'POST' });
   location.href = '/';
 });
-
-// ===================================================================
-// שלב 5: גישה מורחבת - תשלום דרך נדרים פלוס (אייפרם, זרימת יצירת עסקה בצד שרת)
-// ===================================================================
-let currentParamId = null;
-let nedarimListenerAttached = false;
-
-async function loadAccessStatus() {
-  const res = await fetch('/payments/my-access');
-  if (!res.ok) return;
-  const data = await res.json();
-  const box = document.getElementById('accessBox');
-  const now = new Date();
-  if (data.paidUntil && new Date(data.paidUntil) > now) {
-    const until = new Date(data.paidUntil).toLocaleString('he-IL');
-    box.innerHTML = `<span class="access-active">✅ גישה מורחבת פעילה עד ${until} (בלי הגבלת 3 המשתתפים)</span>`;
-  } else {
-    box.innerHTML = `
-      <span>גרסת הניסיון מוגבלת ל-3 משתתפים בו-זמנית למשחק.</span>
-      <button class="btn gold" id="buyAccessBtn">רכשו גישה מורחבת - 50 שעות ב-15 ש"ח</button>
-    `;
-    document.getElementById('buyAccessBtn').addEventListener('click', startPayment);
-  }
-}
-
-function ensureNedarimListener() {
-  if (nedarimListenerAttached) return; // חובה לרשום רק פעם אחת - הפעלה כפולה עלולה לגרום לחיוב כפול
-  nedarimListenerAttached = true;
-  window.addEventListener('message', (event) => {
-    if (!event.data || !event.data.Name) return;
-    if (event.data.Name === 'Height') {
-      const frame = document.getElementById('NedarimFrame');
-      if (frame) frame.style.height = (parseInt(event.data.Value, 10) + 15) + 'px';
-    } else if (event.data.Name === 'TransactionResponse') {
-      handleNedarimResponse(event.data.Value);
-    }
-  });
-}
-
-function postNedarim(data) {
-  document.getElementById('NedarimFrame').contentWindow.postMessage(data, '*');
-}
-
-async function startPayment() {
-  const btn = document.getElementById('buyAccessBtn');
-  if (btn) btn.disabled = true;
-
-  const res = await fetch('/payments/create', { method: 'POST' });
-  const data = await res.json();
-  if (!res.ok) {
-    alert(data.error || 'שגיאה ביצירת עסקה');
-    if (btn) btn.disabled = false;
-    return;
-  }
-
-  currentParamId = data.paramId;
-  document.getElementById('paymentSection').hidden = false;
-  document.getElementById('paymentStatus').textContent = 'טוען טופס תשלום מאובטח...';
-
-  ensureNedarimListener();
-  const frame = document.getElementById('NedarimFrame');
-  frame.onload = () => postNedarim({ Name: 'FinishTransaction', Value: data.transactionId });
-  frame.src = 'https://www.matara.pro/nedarimplus/iframe/';
-}
-
-// חשוב: תגובת האייפרם (TransactionResponse) היא לחוויית משתמש בלבד - האישור
-// האמיתי מגיע לשרת שלנו בנפרד (CallBack מאומת). לכן פה רק סוקרים את הסטטוס
-// אצלנו במקום לסמוך על ה-Status שמגיע כאן ישירות.
-async function handleNedarimResponse(value) {
-  if (value.Status === 'Error') {
-    document.getElementById('paymentStatus').textContent = 'שגיאה: ' + (value.Message || 'התשלום לא הושלם');
-    return;
-  }
-
-  document.getElementById('paymentStatus').textContent = 'מאמתים את התשלום מול השרת, נא להמתין...';
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 1500));
-    try {
-      const statusRes = await fetch(`/payments/status/${currentParamId}`);
-      if (!statusRes.ok) continue;
-      const statusData = await statusRes.json();
-      if (statusData.status === 'approved') {
-        document.getElementById('paymentStatus').textContent = '✅ התשלום אושר! הגישה המורחבת פעילה.';
-        document.getElementById('paymentSection').hidden = true;
-        loadAccessStatus();
-        return;
-      }
-      if (statusData.status === 'error') {
-        document.getElementById('paymentStatus').textContent = 'התשלום נכשל.';
-        return;
-      }
-    } catch { /* ממשיכים לנסות */ }
-  }
-  document.getElementById('paymentStatus').textContent =
-    'האישור עדיין לא התקבל מנדרים פלוס - זה יכול לקחת רגע. רעננו את הדף בעוד דקה כדי לבדוק שוב.';
-}
 
 init();
 </script>

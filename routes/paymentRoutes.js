@@ -98,7 +98,11 @@ router.post('/nedarim-callback', async (req, res) => {
     if (payment.status === 'approved') {
       return res.status(200).send('already processed'); // אידמפוטנטי
     }
-    if (Number(Amount) !== payment.amount) {
+    // הערה: לפי תיעוד נדרים פלוס, שדה Amount אינו מובטח ב-JSON של ה-CallBack
+    // (המסמך מציין רק Status/Message/ID/Confirmation/LastNum כמובטחים).
+    // לכן בודקים התאמה רק אם השדה בכלל הגיע - כדי לא לחסום אישור תשלום אמיתי
+    // בגלל שדה חסר. ה-Param1 הייחודי + כתובת ה-IP המאומתת הם האימות המרכזי.
+    if (Amount !== undefined && Number(Amount) !== payment.amount) {
       console.warn(`⚠️ אי-התאמת סכום ב-callback עבור paramId=${Param1}: צפוי ${payment.amount}, התקבל ${Amount}`);
       return res.status(200).send('ignored: amount mismatch');
     }
