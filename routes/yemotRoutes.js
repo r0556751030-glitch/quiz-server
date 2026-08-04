@@ -22,18 +22,30 @@ function buildPollCommand() {
 
 // שלב 4: מתקשר חדש (בלי Player עדיין) מתבקש להקיש קוד משחק בן 4 ספרות, כדי
 // שהמערכת תדע לאיזה משחק (מתוך כמה שיכולים להיות חיים בו-זמנית) לנתב אותו.
-// M1100.wav = "נא הקש סיסמה ובסיום הקש סולמית" - הקלטה קיימת בחשבון ימות.
-// **הערה**: מבנה זה מועתק בדיוק מ-buildReadCommand/buildPollCommand הקיימים
-// (שכבר עובדים ב-production) עם שינוי רק בפרמטרים הברורים (שם שדה, 4 ספרות
-// בדיוק, כל 10 הספרות מותרות, קובץ הקול). לא אומת מול תיעוד ימות רשמי אם
-// הקלט מסתיים אוטומטית אחרי 4 ספרות או ממתין ל-# כפי שההקלטה אומרת - יש
-// לבדוק בשיחת אמת ולעדכן אם ההתנהגות בפועל שונה.
-function buildCodeEntryCommand() {
-    return `read=f-001=game_code,,4,4,${CONFIG.CODE_ENTRY_TIMEOUT_SECONDS},NO,yes,,,0123456789,3,M1100,NOANSWER,,no`;
+//
+// **גרסה זו קולטת ספרה אחת בכל פעם** (min=1,max=1) - בדיוק אותה תבנית מוכחת
+// שכבר קולטת תשובות לשאלות ב-production (ראו buildReadCommand). הניסיון
+// הקודם (בקשת 4 ספרות בבת אחת, ,,4,4,...) קיבל "בחירה לא חוקית" מימות בבדיקה
+// אמיתית - לא היה ברור למה, ובלי תיעוד רשמי של ימות העדפנו לחזור לתבנית
+// המוכחת במקום לנחש עוד פרמטרים.
+//
+// שם השדה משתנה בכל ניסיון (code1_<attempt>, code2_<attempt> וכו') - כי ימות
+// שומר ערכי שדה ישנים ומחזיר אותם שוב בבקשות עתידיות (בדיוק כמו הבאג הידוע
+// עם ans_<questionId>). בלי זה, קוד שגוי בניסיון 1 היה "מזהם" עם הספרות
+// הישנות שלו את הניסיון הבא באותם שמות שדה.
+const codeEntryAttempt = new Map(); // callId -> מספר הניסיון הנוכחי (מתחיל מ-1)
+
+function buildCodeDigitCommand(fieldName, withIntro) {
+    // M1100.wav = "נא הקש סיסמה ובסיום הקש סולמית" - מושמע רק בספרה הראשונה
+    // של כל ניסיון (withIntro=true). בשאר הספרות באותו ניסיון, "Ok" (כמו
+    // בתבניות הקיימות) - כדי לא להשמיע את כל ההודעה מחדש על כל ספרה.
+    const voiceFile = withIntro ? 'M1100' : 'Ok';
+    return `read=f-001=${fieldName},,1,1,${CONFIG.CODE_ENTRY_TIMEOUT_SECONDS},NO,yes,,,0123456789,3,${voiceFile},NOANSWER,,no`;
 }
 
 async function markDisconnected(io, callId) {
     forget(callId);
+    codeEntryAttempt.delete(callId);
     // מחפשים לפני forget איזה game היה שייך לשחקן הזה, כדי לשדר ל-room הנכון
     const player = await Player.findOneAndUpdate({ callId }, { active: false });
     if (player) {
@@ -73,17 +85,27 @@ router.post('/api', async (req, res) => {
         let player = await Player.findOne({ callId });
 
         if (!player) {
-            // מתקשר חדש - עדיין לא ידוע לאיזה משחק. מבקשים קוד משחק (שלב 4).
-            const enteredCode = req.body.game_code;
-            if (!enteredCode) {
-                return sendOut('ask-code', buildCodeEntryCommand());
-            }
+            // מתקשר חדש - עדיין לא ידוע לאיזה משחק. מבקשים קוד משחק, ספרה אחת
+            // בכל פעם (שלב 4). attempt קובע את שמות השדות של הניסיון הנוכחי.
+            const attempt = codeEntryAttempt.get(callId) || 1;
+            const f1 = `code1_${attempt}`, f2 = `code2_${attempt}`, f3 = `code3_${attempt}`, f4 = `code4_${attempt}`;
+            const c1 = req.body[f1], c2 = req.body[f2], c3 = req.body[f3], c4 = req.body[f4];
 
+            if (!c1) return sendOut(`ask-code-1-a${attempt}`, buildCodeDigitCommand(f1, true));
+            if (!c2) return sendOut(`ask-code-2-a${attempt}`, buildCodeDigitCommand(f2, false));
+            if (!c3) return sendOut(`ask-code-3-a${attempt}`, buildCodeDigitCommand(f3, false));
+            if (!c4) return sendOut(`ask-code-4-a${attempt}`, buildCodeDigitCommand(f4, false));
+
+            const enteredCode = `${c1}${c2}${c3}${c4}`;
             const gs = findGameStateByCode(enteredCode);
             if (!gs) {
-                // קוד שגוי/לא תואם משחק חי - מבקשים שוב. הוחלט: בלי הגבלת ניסיונות.
-                return sendOut('bad-code', buildCodeEntryCommand());
+                // קוד שגוי/לא תואם משחק חי - מתחילים ניסיון חדש עם שמות שדה
+                // חדשים (בלי הגבלת ניסיונות, כפי שהוחלט).
+                const nextAttempt = attempt + 1;
+                codeEntryAttempt.set(callId, nextAttempt);
+                return sendOut('bad-code-retry', buildCodeDigitCommand(`code1_${nextAttempt}`, true));
             }
+            codeEntryAttempt.delete(callId); // הצלחה - אין יותר צורך לעקוב אחרי ניסיונות
 
             const gameId = gs.activeGame._id;
             touch(callId, gameId);
