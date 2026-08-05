@@ -42,7 +42,7 @@
     <div class="modal-box">
       <button class="modal-close" id="paymentCloseBtn" type="button">✕</button>
       <h2>רכישת גישה מלאה</h2>
-      <p class="modal-sub" id="paymentModalSub"></p>
+      <div class="modal-sub" id="paymentModalSub"></div>
       <div class="payment-status" id="paymentStatus"></div>
 
       <div id="paymentDetailsForm">
@@ -58,15 +58,17 @@
         <label class="field-label">טלפון
           <input type="tel" id="payerPhone" class="field-input" inputmode="numeric" autocomplete="tel">
         </label>
-        <label class="field-label" style="display:flex;align-items:flex-start;gap:8px;font-size:14px;font-weight:400;">
-          <input type="checkbox" id="policyAgreeCheckbox" style="margin-top:3px;">
+        <label class="policy-consent">
+          <input type="checkbox" id="policyAgreeCheckbox">
           <span>קראתי ואני מאשר/ת את <a href="/terms.html" target="_blank" rel="noopener">תנאי השימוש</a> ואת <a href="/privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a></span>
         </label>
         <button class="btn gold" id="paymentDetailsSubmitBtn" type="button" disabled>המשך לתשלום</button>
       </div>
 
       <div id="paymentCardSection" hidden>
-        <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:420px"></iframe>
+        <div class="nedarim-frame-wrap">
+          <iframe id="NedarimFrame" scrolling="no" style="height:420px"></iframe>
+        </div>
         <button class="btn gold" id="paymentPayBtn" type="button" disabled>בצע תשלום</button>
       </div>
     </div>
@@ -298,6 +300,13 @@ function onValidateFieldsResponse(value) {
   document.getElementById('paymentPayBtn').disabled = false;
 }
 
+// שימוש ב-innerHTML לבניית כרטיסיית המחיר מחייב לברוח מתווים מיוחדים בשם
+// המשחק (שהמשתמש עצמו הזין) - כדי לא לפתוח פרצת XSS שלא הייתה קיימת כשזה
+// היה textContent רגיל.
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
 async function openPaymentModal(gameId, isCurrentlyActive) {
   // אם המשחק לא חי כרגע - הפעלה שתגיע אחרי התשלום תמחק שחקנים/תשובות מסשן קודם,
   // בדיוק כמו בניסיון חינם. מציגים את אותה אזהרה *לפני* שגובים תשלום, לא אחריו.
@@ -308,8 +317,14 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
 
   pendingPayment = { gameId, paramId: null, transactionId: null, isCurrentlyActive };
   const gameName = (gamesById[gameId] && gamesById[gameId].name) || 'זה';
-  document.getElementById('paymentModalSub').textContent =
-    `₪15 בלבד · 50 שעות גישה מלאה למשחק ${gameName} - ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים`;
+  document.getElementById('paymentModalSub').innerHTML = `
+    <div class="price-badge">
+      <span class="price-amount">₪15</span>
+      <div class="price-lines">
+        <strong>50 שעות גישה מלאה למשחק "${escapeHtml(gameName)}"</strong>
+        <span>ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים</span>
+      </div>
+    </div>`;
   setPaymentStatus('');
   document.getElementById('payerFirstName').value = '';
   document.getElementById('payerLastName').value = '';

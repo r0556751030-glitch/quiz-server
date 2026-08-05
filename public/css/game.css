@@ -126,7 +126,6 @@ body {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
-  margin-bottom: 20px;
 }
 .modal-close {
   position: absolute;
@@ -179,6 +178,123 @@ body {
   outline: none;
   border-color: var(--gold-light);
 }
+
+/* ─── תיבת הסכמה לתנאי שימוש/פרטיות ───────────────────────── */
+.policy-consent {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(255,176,46,0.07);
+  border: 1px solid var(--border-gold);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.policy-consent input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  margin-top: 1px;
+  border: 1.5px solid var(--gold);
+  border-radius: 5px;
+  background: rgba(0,0,0,0.25);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition), border-color var(--transition);
+}
+.policy-consent input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, var(--gold), var(--stage-ruby));
+}
+.policy-consent input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  right: 6px; top: 2px;
+  width: 5px; height: 10px;
+  border: solid #2a0a0a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.policy-consent input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 2px;
+}
+.policy-consent span {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.policy-consent a {
+  color: var(--gold-light);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.policy-consent a:hover { color: var(--gold); }
+
+/* ─── כרטיסיית מחיר (מעל טופס פרטי המשלם) ─────────────────── */
+.price-badge {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255,176,46,0.08);
+  border: 1px solid var(--border-gold);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.price-amount {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--gold-light);
+  white-space: nowrap;
+}
+.price-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.price-lines strong {
+  font-size: 14.5px;
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.price-lines span {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ─── אזור תשלום (iframe נדרים פלוס) ───────────────────────── */
+#paymentCardSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.nedarim-frame-wrap {
+  border: 1px solid var(--border-gold);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.2);
+}
+#NedarimFrame {
+  display: block;
+  width: 100%;
+  border: none;
+}
+
+/* ─── פס גלילה מעוצב לתוך תיבת המודאל (במקום פס אפור ברירת מחדל) ─── */
+.modal-box::-webkit-scrollbar { width: 8px; }
+.modal-box::-webkit-scrollbar-track { background: transparent; }
+.modal-box::-webkit-scrollbar-thumb { background: var(--border-gold); border-radius: 8px; }
+.modal-box::-webkit-scrollbar-thumb:hover { background: var(--gold-deep); }
+.modal-box { scrollbar-width: thin; scrollbar-color: var(--border-gold) transparent; }
 
 /* ─── Home button ─────────────────────────────────────────── */
 
