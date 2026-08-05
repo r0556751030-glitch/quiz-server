@@ -9,7 +9,7 @@ const { requireAuth, requireGameOwnership } = require('../middleware/auth');
 // לפי סיכום עם המשתמש: 15 ש"ח פותחים 50 שעות (זמן קלנדרי מרגע התשלום, לא
 // שעות שימוש בפועל) של גישה מורחבת בלי מגבלת 3 המשתתפים - per-game (על
 // המשחק הספציפי הזה בלבד, לא על כל המשחקים של המשתמש).
-const PAYMENT_AMOUNT_ILS = 15;
+const PAYMENT_AMOUNT_ILS = 1; // ⚠️ שונה זמנית מ-15 ל-1 לבדיקת התיקון של trust proxy (5.8.2026) - יש להחזיר ל-15!
 const EXTENDED_ACCESS_HOURS = 50;
 
 const NEDARIM_MOSAD = process.env.NEDARIM_MOSAD;
@@ -55,7 +55,7 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
       Amount: String(PAYMENT_AMOUNT_ILS),
       Currency: '1',
       Tashlumim: '1',
-      Comment: `קעמפ-קליק - גישה מלאה 50 שעות (${req.game.name})`,
+      Comment: `עבור ק"ק`,
       Param1: paramId,
       CallBack: callbackUrl,
       ...(NEDARIM_CALLBACK_ERROR_EMAIL ? { CallBackMailError: NEDARIM_CALLBACK_ERROR_EMAIL } : {}),
