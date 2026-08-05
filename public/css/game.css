@@ -119,9 +119,15 @@ body {
   font-family: var(--font-display);
   color: var(--gold-light);
   font-size: 22px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
-.modal-sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+.modal-sub {
+  font-family: var(--font-body);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
 .modal-close {
   position: absolute;
   top: 14px; left: 14px;
@@ -133,28 +139,45 @@ body {
 }
 .modal-close:hover { color: var(--gold-light); }
 .payment-status {
+  font-family: var(--font-body);
   color: var(--gold-light);
   font-size: 14px;
+  line-height: 1.5;
   min-height: 20px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .modal-box .btn.gold { width: 100%; justify-content: center; margin-top: 16px; padding: 12px 20px; font-size: 15px; }
+#paymentDetailsForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+#paymentDetailsSubmitBtn { grid-column: 1 / -1; }
 .field-label {
   display: block;
+  font-family: var(--font-body);
   font-size: 13px;
+  font-weight: 600;
   color: var(--muted);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .field-input {
   display: block;
   width: 100%;
-  margin-top: 6px;
-  padding: 10px 14px;
+  box-sizing: border-box;
+  margin-top: 7px;
+  padding: 11px 14px;
   background: rgba(0,0,0,0.25);
   border: 1px solid var(--border-gold);
   border-radius: 8px;
   color: var(--text);
+  font-family: var(--font-body);
   font-size: 15px;
+  transition: border-color var(--transition);
+}
+.field-input:focus {
+  outline: none;
+  border-color: var(--gold-light);
 }
 
 /* ─── Home button ─────────────────────────────────────────── */
@@ -258,6 +281,20 @@ h1 {
   transition: border-color var(--transition);
 }
 .game-card:hover { border-color: rgba(255,176,46,0.4); }
+
+/* שלב 5: משחקים עם גישה מלאה פעילה (בתוך 50 השעות) - הבלטה ויזואלית ברשימה */
+.game-card.paid-active {
+  background: linear-gradient(135deg, rgba(255,176,46,0.10), var(--panel) 60%);
+  border-color: rgba(255,176,46,0.55);
+  box-shadow: 0 0 0 1px rgba(255,176,46,0.15) inset;
+}
+
+.deadline-note {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--gold-light);
+  white-space: nowrap;
+}
 
 /* שלב 5: קיבוץ ויזואלי של שתי חלופות ההפעלה (ניסיון חינם / גישה מלאה) - כדי
    שיהיה ברור שמדובר בבחירה אחת בין שתיים, לא שני כפתורים נפרדים ולא-קשורים. */

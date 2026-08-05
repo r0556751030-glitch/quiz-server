@@ -42,7 +42,7 @@
     <div class="modal-box">
       <button class="modal-close" id="paymentCloseBtn" type="button">✕</button>
       <h2>רכישת גישה מלאה</h2>
-      <p class="modal-sub">₪1 בלבד · 50 שעות גישה מלאה למשחק הזה (לא לשאר המשחקים שלך) - ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים</p>
+      <p class="modal-sub" id="paymentModalSub"></p>
       <div class="payment-status" id="paymentStatus"></div>
 
       <div id="paymentDetailsForm">
@@ -87,10 +87,24 @@ async function init() {
   loadGames();
 }
 
+let gamesById = {}; // שלב 5: מאפשר לשלוף שם משחק/פרטים בעת פתיחת מודאל תשלום, בלי לשלוף שוב מהשרת
+
+// מציג תאריך+שעה בעברית - רק שעה אם זה היום, אחרת גם תאריך קצר
+function formatDeadline(paidUntil) {
+  if (!paidUntil) return '';
+  const d = new Date(paidUntil);
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  if (sameDay) return `היום בשעה ${time}`;
+  const dateStr = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+  return `${dateStr} בשעה ${time}`;
+}
+
 async function loadGames() {
   const res = await fetch('/games');
   const games = await res.json();
   const list = document.getElementById('gamesList');
+  gamesById = Object.fromEntries(games.map((g) => [g._id, g]));
 
   if (!games.length) {
     list.innerHTML = '<div class="empty">עדיין אין משחקים. צרו את הראשון למעלה.</div>';
@@ -98,7 +112,7 @@ async function loadGames() {
   }
 
   list.innerHTML = games.map((g) => `
-    <div class="game-card" data-id="${g._id}">
+    <div class="game-card${(myRole === 'user' && g.hasExtendedAccess) ? ' paid-active' : ''}" data-id="${g._id}">
       <div class="game-name">
         <span class="view-name">${g.name}</span>
         ${myRole === 'admin' ? `<div class="owner-tag">בעלים: ${g.ownerEmail || '—'}</div>` : ''}
@@ -108,6 +122,7 @@ async function loadGames() {
       </div>
       <span class="status-pill ${g.isActive ? 'live' : 'off'}">${g.isActive ? 'חי כרגע' : 'לא פעיל'}</span>
       ${g.isActive ? `<button class="btn gold" onclick="location.href='/admin.html?gameId=${g._id}'">פתח מסך חי</button>` : ''}
+      ${g.isActive && g.hasExtendedAccess ? `<span class="deadline-note">פתוח עד ${formatDeadline(g.paidUntil)}</span>` : ''}
       ${renderActivateArea(g)}
       <button class="btn" data-act="deactivate" ${g.isActive ? '' : 'disabled'}>הפסק</button>
       <button class="btn" data-act="rename">שנה שם</button>
@@ -149,13 +164,14 @@ function renderActivateArea(g) {
     // חי כרגע במסלול ניסיון חינם - עדיין אפשר לשדרג לגישה מלאה בלי לאבד את הסשן הרץ
     return `
       <button class="btn" data-act="activate" disabled>הפעל</button>
-      <button class="btn gold" data-act="upgrade-paid">שדרג לגישה מלאה · ₪1 בלבד · 50 שעות</button>
+      <button class="btn gold" data-act="upgrade-paid">שדרג לגישה מלאה · ₪15 בלבד · 50 שעות</button>
     `;
   }
   if (g.hasExtendedAccess) {
-    const hoursLeft = g.paidUntil ? Math.max(0, Math.round((new Date(g.paidUntil) - new Date()) / 3600000)) : null;
-    const hoursText = hoursLeft !== null ? ` (נותרו כ-${hoursLeft} שעות)` : '';
-    return `<button class="btn gold" data-act="activate-full">הפעל משחק מלא${hoursText}</button>`;
+    return `
+      <button class="btn gold" data-act="activate-full">הפעל</button>
+      <span class="deadline-note">פתוח עד ${formatDeadline(g.paidUntil)}</span>
+    `;
   }
   // שתי האופציות מקובצות ויזואלית יחד (מסגרת אחת + "או" ביניהן), כדי שיהיה
   // ברור שמדובר בבחירה בין שתי חלופות לאותה פעולה, לא שני כפתורים נפרדים.
@@ -163,7 +179,7 @@ function renderActivateArea(g) {
     <div class="activate-choice">
       <button class="btn" data-act="activate-trial">התחל ניסיון חינם (עד 3 משתתפים)</button>
       <span class="choice-or">או</span>
-      <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪1 בלבד · 50 שעות</button>
+      <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪15 בלבד · 50 שעות</button>
     </div>
   `;
 }
@@ -287,6 +303,9 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
   }
 
   pendingPayment = { gameId, paramId: null, transactionId: null, isCurrentlyActive };
+  const gameName = (gamesById[gameId] && gamesById[gameId].name) || 'זה';
+  document.getElementById('paymentModalSub').textContent =
+    `₪15 בלבד · 50 שעות גישה מלאה למשחק ${gameName} - ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים`;
   setPaymentStatus('');
   document.getElementById('payerFirstName').value = '';
   document.getElementById('payerLastName').value = '';
