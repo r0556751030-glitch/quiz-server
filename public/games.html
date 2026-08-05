@@ -52,6 +52,9 @@
         <label class="field-label">תעודת זהות
           <input type="text" id="payerZeout" class="field-input" inputmode="numeric" maxlength="9" autocomplete="off">
         </label>
+        <label class="field-label">טלפון
+          <input type="tel" id="payerPhone" class="field-input" inputmode="numeric" autocomplete="tel">
+        </label>
         <button class="btn gold" id="paymentDetailsSubmitBtn" type="button">המשך לתשלום</button>
       </div>
 
@@ -284,20 +287,27 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
   setPaymentStatus('');
   document.getElementById('payerName').value = '';
   document.getElementById('payerZeout').value = '';
+  document.getElementById('payerPhone').value = '';
   document.getElementById('paymentDetailsForm').hidden = false;
   document.getElementById('paymentCardSection').hidden = true;
   document.getElementById('paymentOverlay').hidden = false;
 }
 
-// שלב 1: פרטי משלם (שם + ת.ז) - נדרים פלוס מציינים בתיעוד ש-Zeout עשוי
-// להידרש ע"י חברת האשראי במעמד החיוב, גם בלי שהמוסד דרש את זה במפורש.
+// שלב 1: פרטי משלם (שם + ת.ז + טלפון) - לפי דוגמה אמיתית שעובדת מול אותו
+// מוסד (1001242) במערכת אחרת, טלפון הוא שדה חובה שם (בניגוד לת.ז, שדווקא
+// לא סומנה חובה באותה דוגמה - אבל משאירים אותה כי כבר הוספנו).
 document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', async () => {
   const gameId = pendingPayment && pendingPayment.gameId;
   if (!gameId) return;
   const name = document.getElementById('payerName').value.trim();
   const zeout = document.getElementById('payerZeout').value.trim();
+  const phone = document.getElementById('payerPhone').value.trim();
   if (!name || !/^\d{5,9}$/.test(zeout)) {
     setPaymentStatus('נא למלא שם מלא ותעודת זהות תקינה (5-9 ספרות)');
+    return;
+  }
+  if (!/^\d{9,10}$/.test(phone)) {
+    setPaymentStatus('נא למלא מספר טלפון תקין (ספרות בלבד)');
     return;
   }
 
@@ -308,7 +318,7 @@ document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', asy
     const res = await fetch(`/payments/${gameId}/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, zeout })
+      body: JSON.stringify({ name, zeout, phone })
     });
     const data = await res.json();
     if (!res.ok || !data.success) {

@@ -37,12 +37,15 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
     return res.status(500).json({ error: 'תשלומים אינם זמינים כרגע - חסרה הגדרת שרת, פנה למנהל המערכת' });
   }
 
-  // שם + ת.ז - נאספים מהמשתמש בטופס הקצר לפני התשלום (games.html). לפי תיעוד
-  // נדרים פלוס, Zeout עשוי להידרש ע"י חברת האשראי במעמד החיוב גם כשהמוסד עצמו
-  // לא הגדיר את זה כחובה - זו הוספה כדי לבדוק אם זו הסיבה לסירוב שראינו.
-  const { name, zeout } = req.body || {};
+  // שם + ת.ז + טלפון - נאספים מהמשתמש בטופס הקצר לפני התשלום (games.html).
+  // דוגמה אמיתית שעובדת מול אותו מוסד (1001242) במערכת אחרת מראה טלפון כשדה
+  // חובה - זו הוספה לבדוק אם זו הסיבה לסירוב שראינו.
+  const { name, zeout, phone } = req.body || {};
   if (!name || !/^\d{5,9}$/.test(String(zeout || ''))) {
     return res.status(400).json({ error: 'נא למלא שם מלא ותעודת זהות תקינה' });
+  }
+  if (!/^\d{9,10}$/.test(String(phone || ''))) {
+    return res.status(400).json({ error: 'נא למלא מספר טלפון תקין' });
   }
   const nameParts = String(name).trim().split(/\s+/);
   const firstName = nameParts[0] || '';
@@ -71,6 +74,7 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
       Zeout: String(zeout),
       FirstName: firstName,
       LastName: lastName,
+      Phone: String(phone),
       Mail: (payerUser && payerUser.email) || '',
       Comment: `עבור ק"ק`,
       Param1: paramId,
