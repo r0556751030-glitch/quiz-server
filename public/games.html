@@ -303,7 +303,6 @@ document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', asy
 
   document.getElementById('paymentDetailsSubmitBtn').disabled = true;
   setPaymentStatus('יוצר עסקה...');
-  initNedarimFrameOnce();
 
   try {
     const res = await fetch(`/payments/${gameId}/create`, {
@@ -321,6 +320,7 @@ document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', asy
     pendingPayment.transactionId = data.transactionId;
     document.getElementById('paymentDetailsForm').hidden = true;
     document.getElementById('paymentCardSection').hidden = false;
+    initNedarimFrameOnce(); // חובה לקרוא אחרי שהאייפרם גלוי (לא בזמן שההורה שלו hidden)
     setPaymentStatus('מלאו את פרטי הכרטיס למטה ולחצו "בצע תשלום"');
     document.getElementById('paymentPayBtn').disabled = false;
   } catch {
