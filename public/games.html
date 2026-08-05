@@ -42,7 +42,7 @@
     <div class="modal-box">
       <button class="modal-close" id="paymentCloseBtn" type="button">✕</button>
       <h2>רכישת גישה מלאה</h2>
-      <div class="modal-sub" id="paymentModalSub"></div>
+      <p class="modal-sub" id="paymentModalSub"></p>
       <div class="payment-status" id="paymentStatus"></div>
 
       <div id="paymentDetailsForm">
@@ -62,7 +62,8 @@
           <input type="checkbox" id="policyAgreeCheckbox">
           <span>קראתי ואני מאשר/ת את <a href="/terms.html" target="_blank" rel="noopener">תנאי השימוש</a> ואת <a href="/privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a></span>
         </label>
-        <button class="btn gold" id="paymentDetailsSubmitBtn" type="button" disabled>המשך לתשלום</button>
+        <button class="btn gold" id="paymentDetailsSubmitBtn" type="button" disabled>אישור פרטים ומעבר לתשלום</button>
+        <p class="policy-hint" id="policyHint">יש לסמן את אישור התנאים כדי להמשיך</p>
       </div>
 
       <div id="paymentCardSection" hidden>
@@ -332,6 +333,7 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
   document.getElementById('payerPhone').value = '';
   document.getElementById('policyAgreeCheckbox').checked = false; // חובה לאשר מחדש בכל פתיחה של המודאל
   document.getElementById('paymentDetailsSubmitBtn').disabled = true;
+  document.getElementById('policyHint').hidden = false;
   document.getElementById('paymentDetailsForm').hidden = false;
   document.getElementById('paymentCardSection').hidden = true;
   document.getElementById('paymentOverlay').hidden = false;
@@ -339,6 +341,7 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
 
 document.getElementById('policyAgreeCheckbox').addEventListener('change', (e) => {
   document.getElementById('paymentDetailsSubmitBtn').disabled = !e.target.checked;
+  document.getElementById('policyHint').hidden = e.target.checked;
 });
 
 // שלב 1: פרטי משלם (שם פרטי + שם משפחה + ת.ז + טלפון) - שדות נפרדים לשם

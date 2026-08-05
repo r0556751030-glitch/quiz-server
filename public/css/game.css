@@ -84,6 +84,23 @@ body {
   font-weight: 800;
 }
 .btn.gold:hover { filter: brightness(1.08); }
+.btn.gold:disabled {
+  background: rgba(255,255,255,0.05);
+  color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
+  border: 1px dashed var(--border-gold);
+}
+.btn.gold:disabled:hover { filter: none; }
+.policy-hint {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.85;
+  margin-top: 8px;
+}
+.policy-hint[hidden] { display: none; }
 .btn.danger { border-color: rgba(200,50,74,0.5); color: #ff8f8f; }
 .btn.danger:hover { background: rgba(200,50,74,0.16); border-color: var(--stage-ruby); }
 
