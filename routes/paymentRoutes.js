@@ -40,7 +40,10 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
   // שם פרטי + שם משפחה + ת.ז + טלפון - נאספים מהמשתמש בטופס הקצר לפני
   // התשלום (games.html), כשדות נפרדים - כמו בדוגמה אמיתית שעובדת מול אותו
   // מוסד (1001242) במערכת אחרת.
-  const { firstName, lastName, zeout, phone } = req.body || {};
+  const { firstName, lastName, zeout, phone, agreedToTerms } = req.body || {};
+  if (agreedToTerms !== true) {
+    return res.status(400).json({ error: 'יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי להמשיך' });
+  }
   if (!firstName || !lastName) {
     return res.status(400).json({ error: 'נא למלא שם פרטי ושם משפחה' });
   }
@@ -58,7 +61,8 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
     game: req.game._id,
     paramId,
     amount: PAYMENT_AMOUNT_ILS,
-    status: 'pending'
+    status: 'pending',
+    agreedToTermsAt: new Date()
   });
 
   const callbackUrl = `${req.protocol}://${req.get('host')}/payments/nedarim-callback`;

@@ -58,7 +58,11 @@
         <label class="field-label">טלפון
           <input type="tel" id="payerPhone" class="field-input" inputmode="numeric" autocomplete="tel">
         </label>
-        <button class="btn gold" id="paymentDetailsSubmitBtn" type="button">המשך לתשלום</button>
+        <label class="field-label" style="display:flex;align-items:flex-start;gap:8px;font-size:14px;font-weight:400;">
+          <input type="checkbox" id="policyAgreeCheckbox" style="margin-top:3px;">
+          <span>קראתי ואני מאשר/ת את <a href="/terms.html" target="_blank" rel="noopener">תנאי השימוש</a> ואת <a href="/privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a></span>
+        </label>
+        <button class="btn gold" id="paymentDetailsSubmitBtn" type="button" disabled>המשך לתשלום</button>
       </div>
 
       <div id="paymentCardSection" hidden>
@@ -311,10 +315,16 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
   document.getElementById('payerLastName').value = '';
   document.getElementById('payerZeout').value = '';
   document.getElementById('payerPhone').value = '';
+  document.getElementById('policyAgreeCheckbox').checked = false; // חובה לאשר מחדש בכל פתיחה של המודאל
+  document.getElementById('paymentDetailsSubmitBtn').disabled = true;
   document.getElementById('paymentDetailsForm').hidden = false;
   document.getElementById('paymentCardSection').hidden = true;
   document.getElementById('paymentOverlay').hidden = false;
 }
+
+document.getElementById('policyAgreeCheckbox').addEventListener('change', (e) => {
+  document.getElementById('paymentDetailsSubmitBtn').disabled = !e.target.checked;
+});
 
 // שלב 1: פרטי משלם (שם פרטי + שם משפחה + ת.ז + טלפון) - שדות נפרדים לשם
 // פרטי/משפחה, כמו בדוגמה אמיתית שעובדת מול אותו מוסד (1001242) במערכת אחרת.
@@ -337,6 +347,10 @@ document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', asy
     setPaymentStatus('נא למלא מספר טלפון תקין (ספרות בלבד)');
     return;
   }
+  if (!document.getElementById('policyAgreeCheckbox').checked) {
+    setPaymentStatus('יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי להמשיך');
+    return;
+  }
 
   document.getElementById('paymentDetailsSubmitBtn').disabled = true;
   setPaymentStatus('יוצר עסקה...');
@@ -345,7 +359,7 @@ document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', asy
     const res = await fetch(`/payments/${gameId}/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firstName, lastName, zeout, phone })
+      body: JSON.stringify({ firstName, lastName, zeout, phone, agreedToTerms: true })
     });
     const data = await res.json();
     if (!res.ok || !data.success) {

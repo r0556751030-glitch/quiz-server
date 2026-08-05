@@ -17,7 +17,10 @@ const paymentSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   nedarimTransactionId: { type: String, default: null }, // ה-ID שמוחזר מ-CreateTransaction
   status: { type: String, enum: ['pending', 'approved', 'error'], default: 'pending' },
-  approvedAt: { type: Date, default: null }
+  approvedAt: { type: Date, default: null },
+  // תיעוד שרתי (לא רק צ'קבוקס בדפדפן) של אישור תנאי השימוש/מדיניות הפרטיות -
+  // ראיה לכך שהאישור אכן ניתן ברגע יצירת העסקה, לצורך גיבוי משפטי.
+  agreedToTermsAt: { type: Date, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Payment', paymentSchema);
