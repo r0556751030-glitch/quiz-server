@@ -42,7 +42,7 @@
     <div class="modal-box">
       <button class="modal-close" id="paymentCloseBtn" type="button">✕</button>
       <h2>רכישת גישה מלאה</h2>
-      <p class="modal-sub">₪15 בלבד · 50 שעות גישה מלאה למשחק הזה (לא לשאר המשחקים שלך) - ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים</p>
+      <p class="modal-sub">₪14 בלבד · 50 שעות גישה מלאה למשחק הזה (לא לשאר המשחקים שלך) - ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים</p>
       <div class="payment-status" id="paymentStatus"></div>
       <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:420px"></iframe>
       <button class="btn gold" id="paymentPayBtn" type="button" disabled>בצע תשלום</button>
@@ -130,7 +130,7 @@ function renderActivateArea(g) {
     // חי כרגע במסלול ניסיון חינם - עדיין אפשר לשדרג לגישה מלאה בלי לאבד את הסשן הרץ
     return `
       <button class="btn" data-act="activate" disabled>הפעל</button>
-      <button class="btn gold" data-act="upgrade-paid">שדרג לגישה מלאה · ₪15 בלבד · 50 שעות</button>
+      <button class="btn gold" data-act="upgrade-paid">שדרג לגישה מלאה · ₪14 בלבד · 50 שעות</button>
     `;
   }
   if (g.hasExtendedAccess) {
@@ -144,7 +144,7 @@ function renderActivateArea(g) {
     <div class="activate-choice">
       <button class="btn" data-act="activate-trial">התחל ניסיון חינם (עד 3 משתתפים)</button>
       <span class="choice-or">או</span>
-      <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪15 בלבד · 50 שעות</button>
+      <button class="btn gold" data-act="activate-paid">הפעל גישה מלאה · ₪14 בלבד · 50 שעות</button>
     </div>
   `;
 }

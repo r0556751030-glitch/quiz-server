@@ -9,7 +9,7 @@ const { requireAuth, requireGameOwnership } = require('../middleware/auth');
 // לפי סיכום עם המשתמש: 15 ש"ח פותחים 50 שעות (זמן קלנדרי מרגע התשלום, לא
 // שעות שימוש בפועל) של גישה מורחבת בלי מגבלת 3 המשתתפים - per-game (על
 // המשחק הספציפי הזה בלבד, לא על כל המשחקים של המשתמש).
-const PAYMENT_AMOUNT_ILS = 15;
+const PAYMENT_AMOUNT_ILS = 14; // ⚠️ שונה זמנית מ-15 ל-14 לבדיקת תיאוריית "עסקה זהה כפולה" (5.8.2026) - יש להחזיר ל-15!
 const EXTENDED_ACCESS_HOURS = 50;
 
 const NEDARIM_MOSAD = process.env.NEDARIM_MOSAD;
