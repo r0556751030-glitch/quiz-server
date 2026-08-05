@@ -37,19 +37,19 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
     return res.status(500).json({ error: 'תשלומים אינם זמינים כרגע - חסרה הגדרת שרת, פנה למנהל המערכת' });
   }
 
-  // שם + ת.ז + טלפון - נאספים מהמשתמש בטופס הקצר לפני התשלום (games.html).
-  // דוגמה אמיתית שעובדת מול אותו מוסד (1001242) במערכת אחרת מראה טלפון כשדה
-  // חובה - זו הוספה לבדוק אם זו הסיבה לסירוב שראינו.
-  const { name, zeout, phone } = req.body || {};
-  if (!name || !/^\d{5,9}$/.test(String(zeout || ''))) {
-    return res.status(400).json({ error: 'נא למלא שם מלא ותעודת זהות תקינה' });
+  // שם פרטי + שם משפחה + ת.ז + טלפון - נאספים מהמשתמש בטופס הקצר לפני
+  // התשלום (games.html), כשדות נפרדים - כמו בדוגמה אמיתית שעובדת מול אותו
+  // מוסד (1001242) במערכת אחרת.
+  const { firstName, lastName, zeout, phone } = req.body || {};
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'נא למלא שם פרטי ושם משפחה' });
+  }
+  if (!/^\d{5,9}$/.test(String(zeout || ''))) {
+    return res.status(400).json({ error: 'נא למלא תעודת זהות תקינה' });
   }
   if (!/^\d{9,10}$/.test(String(phone || ''))) {
     return res.status(400).json({ error: 'נא למלא מספר טלפון תקין' });
   }
-  const nameParts = String(name).trim().split(/\s+/);
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.slice(1).join(' ');
   const payerUser = await User.findById(req.auth.userId).select('email');
 
   const paramId = crypto.randomUUID();
@@ -82,6 +82,12 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
       ...(NEDARIM_CALLBACK_ERROR_EMAIL ? { CallBackMailError: NEDARIM_CALLBACK_ERROR_EMAIL } : {}),
       AjaxId: String(Date.now()) // מומלץ ע"י נדרים - מונע חיוב כפול על תקלת תקשורת
     });
+
+    // זמני - הדפסת כל השדות שנשלחים בפועל (חוץ מ-ApiValid הסודי), כדי שיהיה
+    // אפשר להשוות 1:1 מול בקשה מוצלחת אמיתית מאותו מוסד ממערכת אחרת.
+    const debugFields = Object.fromEntries(form.entries());
+    delete debugFields.ApiValid;
+    console.log('📤 שדות שנשלחים ל-CreateTransaction (ApiValid הוסתר):', debugFields);
 
     const nedarimRes = await fetch(
       'https://matara.pro/nedarimplus/V6/Files/WebServices/DebitIframe.aspx?Action=CreateTransaction',
