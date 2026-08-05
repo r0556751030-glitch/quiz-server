@@ -74,11 +74,13 @@ router.post('/:gameId/create', requireAuth, requireGameOwnership, async (req, re
       Zeout: String(zeout),
       FirstName: firstName,
       LastName: lastName,
+      ClientName: `${firstName} ${lastName}`.trim(), // לפי דוגמה אמיתית שעובדת מול אותו מוסד - השדה ה"מרכזי והמומלץ" אצל נדרים פלוס
       Phone: String(phone),
       Mail: (payerUser && payerUser.email) || '',
       Comment: `עבור ק"ק`,
       Param1: paramId,
       CallBack: callbackUrl,
+      CallBackURL: callbackUrl, // כפילות מכוונת - התיעוד הרשמי אומר CallBack, דוגמה אמיתית ממוסד זהה השתמשה ב-CallBackURL. שולחים את שניהם ליתר ביטחון.
       ...(NEDARIM_CALLBACK_ERROR_EMAIL ? { CallBackMailError: NEDARIM_CALLBACK_ERROR_EMAIL } : {}),
       AjaxId: String(Date.now()) // מומלץ ע"י נדרים - מונע חיוב כפול על תקלת תקשורת
     });
