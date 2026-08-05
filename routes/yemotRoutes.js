@@ -37,14 +37,13 @@ function buildPollCommand() {
 const codeEntryAttempt = new Map(); // callId -> מספר הניסיון הנוכחי (מתחיל מ-1)
 
 function buildCodeDigitCommand(fieldName, withIntro) {
-    // עדכון (5.8.2026): הוחלף המנגנון הקודם (שם קובץ M1100 בפרמטר קול של ה-read,
-    // ששייך למקור בעצם למנגנון "סיסמת שלוחה" הנפרד של ימות, לא ל-read עצמו) -
-    // בתבנית מתועדת מהפורום: id_list_message=...&read=... (הודעה משולבת עם
-    // בקשת הקשה באותה תגובה אחת). ההשמעה של ההודעה עצמה לוקחת כמה שניות טבעיות -
-    // בדיוק "חוצץ הזמן" שנמצא אמפירית כנחוץ (בלי טיימר מלאכותי), ומחליף לגמרי
-    // את השימוש ב-M1100. מושמעת רק בספרה הראשונה של כל ניסיון (withIntro=true).
-    const intro = withIntro ? `id_list_message=t-אנא הקישו את קוד המשחק בן ארבע הספרות&` : '';
-    return `${intro}read=f-001=${fieldName},,1,1,${CONFIG.CODE_ENTRY_TIMEOUT_SECONDS},NO,yes,,,0123456789,3,Ok,NOANSWER,,no`;
+    // עדכון (5.8.2026, לפי תשובת מומחה בפורום freeivr): הפתרון הנכון הוא לשים
+    // את הודעת ה-TTS ישירות כמקור הקול הראשי של ה-read עצמו - לא לשלב
+    // id_list_message נפרד עם & (זה מה שיצר את קונפליקט התזמון/הקטיעה).
+    // בספרה הראשונה של כל ניסיון (withIntro=true) - TTS עם ההודעה המלאה.
+    // בשאר הספרות באותו ניסיון - חוזרים לקובץ הדממה f-001 הקיים (בלי הודעה חוזרת).
+    const voiceSource = withIntro ? 't-אנא הקישו קוד משחק בן 4 ספרות' : 'f-001';
+    return `read=${voiceSource}=${fieldName},,1,1,${CONFIG.CODE_ENTRY_TIMEOUT_SECONDS},NO,yes,,,0123456789,3,Ok,NOANSWER,,no`;
 }
 
 async function markDisconnected(io, callId) {
