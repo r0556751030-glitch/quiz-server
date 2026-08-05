@@ -237,7 +237,26 @@ function handleNedarimMessage(event) {
     nedarimFrame.style.height = (parseInt(msg.Value, 10) + 15) + 'px';
   } else if (msg.Name === 'TransactionResponse') {
     onNedarimTransactionResponse(msg.Value || {});
+  } else if (msg.Name === 'ValidateFields') {
+    onValidateFieldsResponse(msg.Value);
   }
+}
+
+// שדה תקין לגמרי (Value === 'OK') - ממשיכים לחיוב בפועל.
+// שדה לא תקין (Value === {Field, ErrorType}) - מציגים הודעה ברורה במקום לנסות
+// לחייב ולקבל סירוב מהבנק על משהו שאפשר היה לתפוס מראש בצד הלקוח.
+function onValidateFieldsResponse(value) {
+  if (value === 'OK') {
+    setPaymentStatus('מעבד תשלום...');
+    postNedarim({ Name: 'FinishTransaction', Value: pendingPayment.transactionId });
+    return;
+  }
+  const fieldNames = { Card: 'מספר הכרטיס', Expiration: 'תוקף הכרטיס', CVV: 'קוד האבטחה (CVV)' };
+  const errorNames = { Empty: 'לא מולא', Wrong: 'לא תקין' };
+  const fieldLabel = fieldNames[value && value.Field] || (value && value.Field) || 'אחד השדות';
+  const errorLabel = errorNames[value && value.ErrorType] || '';
+  setPaymentStatus(`${fieldLabel} ${errorLabel} - תקנו ולחצו שוב על "בצע תשלום"`);
+  document.getElementById('paymentPayBtn').disabled = false;
 }
 
 async function openPaymentModal(gameId, isCurrentlyActive) {
@@ -286,8 +305,8 @@ document.getElementById('paymentPayBtn').addEventListener('click', () => {
     return;
   }
   document.getElementById('paymentPayBtn').disabled = true; // מניעת לחיצה כפולה - לפי המלצת נדרים פלוס
-  setPaymentStatus('מעבד תשלום...');
-  postNedarim({ Name: 'FinishTransaction', Value: pendingPayment.transactionId });
+  setPaymentStatus('בודק את פרטי הכרטיס...');
+  postNedarim({ Name: 'ValidateFields' }); // רק אם תקין (ראו onValidateFieldsResponse) עוברים בפועל ל-FinishTransaction
 });
 
 document.getElementById('paymentCloseBtn').addEventListener('click', closePaymentModal);
