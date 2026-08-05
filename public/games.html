@@ -44,8 +44,21 @@
       <h2>רכישת גישה מלאה</h2>
       <p class="modal-sub">₪14 בלבד · 50 שעות גישה מלאה למשחק הזה (לא לשאר המשחקים שלך) - ללא הגבלה על מספר ההפעלות בתוך 50 השעות, ובלי מגבלת 3 המשתתפים</p>
       <div class="payment-status" id="paymentStatus"></div>
-      <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:420px"></iframe>
-      <button class="btn gold" id="paymentPayBtn" type="button" disabled>בצע תשלום</button>
+
+      <div id="paymentDetailsForm">
+        <label class="field-label">שם מלא לחשבונית
+          <input type="text" id="payerName" class="field-input" autocomplete="name">
+        </label>
+        <label class="field-label">תעודת זהות
+          <input type="text" id="payerZeout" class="field-input" inputmode="numeric" maxlength="9" autocomplete="off">
+        </label>
+        <button class="btn gold" id="paymentDetailsSubmitBtn" type="button">המשך לתשלום</button>
+      </div>
+
+      <div id="paymentCardSection" hidden>
+        <iframe id="NedarimFrame" scrolling="no" style="width:100%;border:none;height:420px"></iframe>
+        <button class="btn gold" id="paymentPayBtn" type="button" disabled>בצע תשלום</button>
+      </div>
     </div>
   </div>
 
@@ -268,26 +281,54 @@ async function openPaymentModal(gameId, isCurrentlyActive) {
   }
 
   pendingPayment = { gameId, paramId: null, transactionId: null, isCurrentlyActive };
-  setPaymentStatus('יוצר עסקה...');
-  document.getElementById('paymentPayBtn').disabled = true;
+  setPaymentStatus('');
+  document.getElementById('payerName').value = '';
+  document.getElementById('payerZeout').value = '';
+  document.getElementById('paymentDetailsForm').hidden = false;
+  document.getElementById('paymentCardSection').hidden = true;
   document.getElementById('paymentOverlay').hidden = false;
+}
+
+// שלב 1: פרטי משלם (שם + ת.ז) - נדרים פלוס מציינים בתיעוד ש-Zeout עשוי
+// להידרש ע"י חברת האשראי במעמד החיוב, גם בלי שהמוסד דרש את זה במפורש.
+document.getElementById('paymentDetailsSubmitBtn').addEventListener('click', async () => {
+  const gameId = pendingPayment && pendingPayment.gameId;
+  if (!gameId) return;
+  const name = document.getElementById('payerName').value.trim();
+  const zeout = document.getElementById('payerZeout').value.trim();
+  if (!name || !/^\d{5,9}$/.test(zeout)) {
+    setPaymentStatus('נא למלא שם מלא ותעודת זהות תקינה (5-9 ספרות)');
+    return;
+  }
+
+  document.getElementById('paymentDetailsSubmitBtn').disabled = true;
+  setPaymentStatus('יוצר עסקה...');
   initNedarimFrameOnce();
 
   try {
-    const res = await fetch(`/payments/${gameId}/create`, { method: 'POST' });
+    const res = await fetch(`/payments/${gameId}/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, zeout })
+    });
     const data = await res.json();
     if (!res.ok || !data.success) {
       setPaymentStatus(data.error || 'שגיאה ביצירת עסקה, נסו שוב');
+      document.getElementById('paymentDetailsSubmitBtn').disabled = false;
       return;
     }
     pendingPayment.paramId = data.paramId;
     pendingPayment.transactionId = data.transactionId;
+    document.getElementById('paymentDetailsForm').hidden = true;
+    document.getElementById('paymentCardSection').hidden = false;
     setPaymentStatus('מלאו את פרטי הכרטיס למטה ולחצו "בצע תשלום"');
     document.getElementById('paymentPayBtn').disabled = false;
   } catch {
     setPaymentStatus('שגיאת תקשורת - נסו שוב');
+  } finally {
+    document.getElementById('paymentDetailsSubmitBtn').disabled = false;
   }
-}
+});
 
 function setPaymentStatus(text) {
   document.getElementById('paymentStatus').textContent = text;

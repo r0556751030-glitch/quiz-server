@@ -139,6 +139,23 @@ body {
   margin-bottom: 12px;
 }
 .modal-box .btn.gold { width: 100%; justify-content: center; margin-top: 16px; padding: 12px 20px; font-size: 15px; }
+.field-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.field-input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border-gold);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 15px;
+}
 
 /* ─── Home button ─────────────────────────────────────────── */
 
