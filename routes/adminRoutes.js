@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose'); // תיקון 6.8.2026: נדרש כדי להמיר gameId (string) ל-ObjectId לפני aggregate()
 const Question = require('../models/Question');
 const Player = require('../models/Player');
 const Answer = require('../models/Answer');
@@ -141,9 +142,19 @@ async function computeAndEmitResults(io, gs, question, openedAt) {
     });
 }
 
+// תיקון 6.8.2026: gameId שמגיע מ-requireGameContext הוא String (ראו auth.js:
+// req.gameId = String(game._id)), אבל aggregate() - בשונה מ-find()/findOne() -
+// לא ממיר (cast) אוטומטית לפי הסכימה. $match: { game: "מחרוזת" } נגד שדה
+// מסוג ObjectId לעולם לא מתאים לאף מסמך, אז הפייפליין תמיד חוזר ריק. זה גרם
+// לכך שכל 3 מקומות חישוב הניקוד/מהירות (buildFinalResults, /leaderboard,
+// /leaderboard-speed) הציגו תמיד 0 - למרות שה-score עצמו נשמר נכון ב-DB
+// (הקוד שכותב אותו ב-yemotRoutes.js לא עובר דרך aggregate בכלל).
+// כאן ממירים במפורש ל-ObjectId לפני שימוש בכל $match/$expr שמשווה מול gameId.
 async function buildFinalResults(gameId) {
+    const gameObjectId = new mongoose.Types.ObjectId(gameId);
+
     const playersAgg = await Player.aggregate([
-        { $match: { game: gameId } },
+        { $match: { game: gameObjectId } },
         {
             $group: {
                 _id: '$phone',
@@ -156,7 +167,7 @@ async function buildFinalResults(gameId) {
 
     const allPlayerIds = playersAgg.flatMap((p) => p.playerIds);
     const answerAgg = await Answer.aggregate([
-        { $match: { game: gameId, player: { $in: allPlayerIds }, isCorrect: true } },
+        { $match: { game: gameObjectId, player: { $in: allPlayerIds }, isCorrect: true } },
         { $lookup: { from: 'players', localField: 'player', foreignField: '_id', as: 'pl' } },
         { $unwind: '$pl' },
         {
@@ -453,9 +464,10 @@ router.post('/questions/reorder', requireLiveState, async (req, res) => {
 
 router.get('/leaderboard', async (req, res) => {
     const gameId = req.gameId;
+    const gameObjectId = new mongoose.Types.ObjectId(gameId); // תיקון 6.8.2026 - ראו הערה ליד buildFinalResults
 
     const players = await Player.aggregate([
-        { $match: { game: gameId } },
+        { $match: { game: gameObjectId } },
         { $group: { _id: '$phone', score: { $sum: '$score' }, active: { $max: { $cond: ['$active', 1, 0] } } } },
         {
             $lookup: {
@@ -466,7 +478,7 @@ router.get('/leaderboard', async (req, res) => {
                         $expr: {
                             $and: [
                                 { $eq: ['$phone', '$$phone'] },
-                                { $eq: ['$game', gameId] }
+                                { $eq: ['$game', gameObjectId] }
                             ]
                         }
                     }
@@ -495,9 +507,10 @@ router.get('/leaderboard', async (req, res) => {
 
 router.get('/leaderboard-speed', async (req, res) => {
     const gameId = req.gameId;
+    const gameObjectId = new mongoose.Types.ObjectId(gameId); // תיקון 6.8.2026 - ראו הערה ליד buildFinalResults
 
     const speed = await Answer.aggregate([
-        { $match: { game: gameId, isCorrect: true, responseTimeMs: { $ne: null } } },
+        { $match: { game: gameObjectId, isCorrect: true, responseTimeMs: { $ne: null } } },
         { $lookup: { from: 'players', localField: 'player', foreignField: '_id', as: 'p' } },
         { $unwind: '$p' },
         { $group: { _id: '$p.phone', totalTimeMs: { $sum: '$responseTimeMs' }, correctCount: { $sum: 1 } } },
@@ -510,7 +523,7 @@ router.get('/leaderboard-speed', async (req, res) => {
                         $expr: {
                             $and: [
                                 { $eq: ['$phone', '$$phone'] },
-                                { $eq: ['$game', gameId] }
+                                { $eq: ['$game', gameObjectId] }
                             ]
                         }
                     }
