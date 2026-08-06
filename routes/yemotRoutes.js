@@ -177,9 +177,24 @@ router.post('/api', async (req, res) => {
                 const isSurvey = !!gs.currentQuestion.isSurvey;
 
                 // לשאלת סקר: אין "נכון/לא נכון", תמיד isCorrect=false, אין ניקוד
+                //
+                // תיקון 6.8.2026: היה כאן קודם השוואת מחרוזות מדויקת
+                // (answer === String(correctIndex + 1)) שנכשלה בשקט כל עוד הערך
+                // הגולמי שחוזר מימות בשדה התשובה לא זהה בייטים-לבייטים למחרוזת
+                // הצפויה (למשל רווח/אפס מוביל/תו נסתר - לא ידוע לי הפורמט המדויק
+                // של ימות, לכן לא מנחשים אותו). זה בדיוק תאם לתסמין שדווח: אחוזי
+                // המענה תקינים כי הם מחושבים ב-adminRoutes.js עם Number(a.choice)
+                // (פרסור סלחני), בזמן שה-isCorrect כאן (וממנו גם הניקוד וגם ה-avg
+                // response time, ששניהם תלויים ב-isCorrect:true) נכשל תמיד.
+                // התיקון: להשתמש באותה שיטת פרסור סלחנית (Number) גם כאן, כדי
+                // שההשוואה תהיה על הערך המספרי ולא תלויה בפורמט המחרוזת הגולמי.
                 const isCorrect = isSurvey
                     ? false
-                    : answer === String(gs.currentQuestion.correctIndex + 1);
+                    : Number(answer) === gs.currentQuestion.correctIndex + 1;
+
+                // לוג אבחון זמני - למחוק אחרי שמאשרים בלוגים של Render שהניקוד
+                // אכן עולה כמו שצריך. עוזר גם אם יעלה שוב מקרה קצה עתידי.
+                console.log(`[SCORE-DEBUG] callId=${callId} rawAnswer=${JSON.stringify(answer)} correctIndex=${gs.currentQuestion.correctIndex} isCorrect=${isCorrect}`);
 
                 // זמן תגובה נמדד מרגע תחילת הטיימר הגלוי (לא מ-gs.openedAt האמיתי,
                 // שמקדים אותו ב-READING_SECONDS) - כדי שהניקוד/דירוג המהירות ישקפו
